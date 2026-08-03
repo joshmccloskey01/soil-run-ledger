@@ -150,6 +150,11 @@
   .govwhy .gwline{display:block;padding-left:14px;text-indent:-14px}
   .govengine{margin-top:10px;font-size:10px;color:rgba(182,189,199,.6);text-transform:uppercase;font-weight:700;letter-spacing:1px}
   .govnote{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .sbanner{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:10px;font-size:12.5px;
+           font-weight:700;margin-bottom:12px;border:1px solid var(--line);line-height:1.45}
+  .sbanner.ok{background:rgba(123,220,58,.07);border-color:rgba(123,220,58,.3);color:var(--green)}
+  .sbanner.warn{background:rgba(255,133,11,.09);border-color:rgba(255,133,11,.4);color:var(--orange)}
+  .sbanner.bad{background:rgba(255,56,61,.1);border-color:rgba(255,56,61,.45);color:var(--red)}
   .govchip.closed{background:rgba(182,189,199,.15);color:var(--muted)}
   .govfill.closed{background:rgba(182,189,199,.3)}
   .zgov.closed-acct{opacity:.6}
@@ -271,9 +276,9 @@
 
   <div class="head">
     <div>
-      <h1>Josh Run Ledger <span class="badge">v5</span></h1>
+      <h1>Josh Run Ledger <span class="badge">v6</span></h1>
       <div class="sub">Four step accounts &middot; no conversion between them</div>
-      <div class="sub" style="opacity:.55;font-size:11px">build 5 &middot; daily steps now save</div>
+      <div class="sub" style="opacity:.55;font-size:11px">build 6 &middot; imports + steps persist &middot; write-verified</div>
     </div>
     <div class="datebox">
       <div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">Window end</div>
@@ -293,6 +298,7 @@
   <button id="clearBtn" style="margin:2px 0 0;padding:8px 12px;background:rgba(255,56,61,.14);border:1px solid var(--red);color:var(--red);border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">↺ Clear imported data &amp; rebuild</button>
 
 
+  <div id="storageBanner" class="sbanner ok"></div>
   <div id="governor"></div>
   <div id="summary"></div>
   <div id="tableWrap"></div>
@@ -1211,6 +1217,7 @@ async function handleFiles(files){
     importNotes.push('✓ '+wType(g.workout)+' — '+(date||'?')+' · '+bits.join(' · ')+(cmp?('<br><span style="opacity:.75">'+cmp+'</span>'):'')+(diag?('<br><span style="opacity:.65;font-size:11px;color:#7bdc3a">'+diag+'</span>'):''));
   }
 
+  persist();   // imported runs now survive a refresh
   const fl=[...new Set(loadedNames)].map(n=>'✓ '+n).join('<br>');
   filelist.innerHTML = fl + (importNotes.length ? '<div style="margin-top:8px;color:var(--muted);line-height:1.5">'+importNotes.join('<br>')+'</div>' : '');
   if(allSamples.length){ const maxDate=allSamples.map(s=>s.date).sort().pop(); if(maxDate) document.getElementById('dateEnd').value=maxDate; }
@@ -1240,29 +1247,114 @@ const LS_KEY='runledger_scores_v2';          // v2: run samples no longer cached
 const saveStore={};                           // date -> { score:0-10, reset:bool, notes:string }
 let ssTouched=false;
 
-function persist(){
-  // Persist structural scores, your four daily limits, and the daily step counts
-  // you type in. Run samples are NEVER cached — they are always rebuilt from the
-  // source files on import, so stale classifications can't survive.
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore, zoneLimits, limitsVersion:LIMITS_VERSION, healthSteps})); }catch(e){}
+// ---------- IMPORT PERSISTENCE ----------
+// Imported runs used to be discarded on every refresh. The reason given was to
+// stop stale band classifications surviving a re-import — a real concern, but
+// throwing the data away is the wrong fix. Instead: store a fingerprint of the
+// band table alongside the data. If the bands ever change, the cache is dropped
+// and you re-import; otherwise your runs survive a reload.
+const ZONE_FINGERPRINT = (()=>{
+  const s = ZONES.map(z=>z.name+':'+z.lo+':'+z.hi).join('|');
+  let h = 0;
+  for(let i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) | 0; }
+  return h;
+})();
+
+// A representative speed inside each band. Nothing downstream reads raw velocity
+// except assignZone(), so a per-band value round-trips losslessly for our purposes.
+const ZONE_MIDV = {};
+ZONES.forEach(z=>{ ZONE_MIDV[z.name] = isFinite(z.hi) ? (z.lo+z.hi)/2 : z.lo*1.05; });
+
+// Per-second samples would blow the ~5MB storage ceiling in a week. Collapse to
+// one row per date+band: [date, band, steps, seconds] — a few hundred bytes/day.
+function compressSamples(){
+  const acc = {};
+  for(const s of allSamples){
+    const zn = assignZone(s.v);
+    if(!zn) continue;
+    const k = s.date+'\u0001'+zn;
+    if(!acc[k]) acc[k] = [s.date, zn, 0, 0];
+    acc[k][2] += s.steps;
+    acc[k][3] += (s.secs||0);
+  }
+  return Object.values(acc).map(a=>[a[0], a[1], Math.round(a[2]*10)/10, Math.round(a[3])]);
 }
+function expandSamples(rows){
+  if(!Array.isArray(rows)) return [];
+  return rows
+    .filter(r=>Array.isArray(r) && ZONE_MIDV[r[1]]!=null)
+    .map(([date,zn,steps,secs])=>({date, v:ZONE_MIDV[zn], steps:+steps||0, secs:+secs||0}));
+}
+
+// ---------- STORAGE HEALTH ----------
+// Every write is read back and confirmed. A silently-swallowed failure is what
+// let the app say "Saved ✓" while Safari dropped the data on the floor.
+let storageState = { ok:true, msg:'', bytes:0 };
+
+function persist(){
+  let payload;
+  try{
+    payload = JSON.stringify({
+      saveStore, healthSteps, zoneLimits, limitsVersion:LIMITS_VERSION,
+      samples: compressSamples(), zoneFp: ZONE_FINGERPRINT,
+      loadedNames: [...new Set(loadedNames)]
+    });
+  }catch(e){
+    storageState = { ok:false, bytes:0, msg:'Could not package data for saving: '+e.message };
+    renderStorageBanner(); return false;
+  }
+  try{
+    localStorage.setItem(LS_KEY, payload);
+    if(localStorage.getItem(LS_KEY) !== payload)      // a no-op write is still a failure
+      throw new Error('the write did not stick');
+    storageState = { ok:true, msg:'', bytes:payload.length };
+  }catch(e){
+    const quota = /quota|exceeded|full/i.test((e.name||'')+(e.message||''));
+    storageState = { ok:false, bytes:payload.length, msg: quota
+      ? 'Storage is full. Clear old imports to free space — your scores are small and will be kept.'
+      : 'Safari is refusing to save (Private Browsing blocks storage entirely). Open this page in a normal tab.' };
+  }
+  renderStorageBanner();
+  return storageState.ok;
+}
+
 function restoreState(){
   try{
-    let s=JSON.parse(localStorage.getItem(LS_KEY)||'null');
-    if(!s){ const old=JSON.parse(localStorage.getItem('runledger_state_v1')||'null'); if(old&&old.saveStore) s={saveStore:old.saveStore}; } // carry scores forward, drop old samples
+    let s = JSON.parse(localStorage.getItem(LS_KEY)||'null');
+    if(!s){ const old=JSON.parse(localStorage.getItem('runledger_state_v1')||'null'); if(old&&old.saveStore) s={saveStore:old.saveStore}; }
     if(s){
       Object.assign(saveStore, s.saveStore||{});
       Object.assign(healthSteps, s.healthSteps||{});
-      // Only honour saved limits from the current version; older saves get the
-      // new defaults instead of silently pinning the old numbers.
       if(s.zoneLimits && s.limitsVersion === LIMITS_VERSION){
         for(const g of Object.keys(ZONE_LIMIT_DEFAULTS)){
           if(isFinite(s.zoneLimits[g])) zoneLimits[g]=s.zoneLimits[g];
         }
       }
+      if(s.samples && s.zoneFp === ZONE_FINGERPRINT){
+        allSamples = expandSamples(s.samples);
+        if(Array.isArray(s.loadedNames)) loadedNames = s.loadedNames.slice();
+      } else if(s.samples){
+        storageState = { ok:true, bytes:0,
+          msg:'Band definitions changed since your last import — re-import your run files to rebuild.' };
+      }
     }
-    try{ localStorage.removeItem('runledger_state_v1'); }catch(e){}   // purge old cached samples for good
-  }catch(e){}
+    try{ localStorage.removeItem('runledger_state_v1'); }catch(e){}
+  }catch(e){
+    storageState = { ok:false, bytes:0, msg:'Saved data could not be read: '+e.message };
+  }
+}
+
+function renderStorageBanner(){
+  const el = document.getElementById('storageBanner');
+  if(!el) return;
+  if(storageState.ok && !storageState.msg){
+    const kb = (storageState.bytes/1024).toFixed(1);
+    el.className = 'sbanner ok';
+    el.innerHTML = `<span>💾</span><span>Saved to this device — ${kb} KB${loadedNames.length?` · ${[...new Set(loadedNames)].length} file(s) kept`:''}</span>`;
+  } else {
+    el.className = 'sbanner ' + (storageState.ok ? 'warn' : 'bad');
+    el.innerHTML = `<span>${storageState.ok?'⚠️':'🚫'}</span><span>${storageState.msg}</span>`;
+  }
 }
 
 function setSsUI(score){
@@ -1355,8 +1447,11 @@ document.getElementById('resetBtn').addEventListener('click',()=>{
   const cur=saveStore[d]||{};
   const score = ssTouched ? +document.getElementById('ssRange').value : (cur.score!=null?cur.score:10);
   saveStore[d]={ score, reset:true, notes:(document.getElementById('notes').value||cur.notes||'') };
-  ssTouched=true; setSsUI(score); persist(); updateSaveBtn(); renderDash(); render();
-  const msg=document.getElementById('savedMsg'); msg.textContent=`Marked ${d} as a full reset ✓`; setTimeout(()=>msg.textContent='',3000);
+  ssTouched=true; setSsUI(score); const rok=persist(); updateSaveBtn(); renderDash(); render();
+  const msg=document.getElementById('savedMsg');
+  msg.textContent = rok ? `Marked ${d} as a full reset ✓` : `NOT SAVED — ${storageState.msg}`;
+  msg.style.color = rok ? '' : 'var(--red)';
+  setTimeout(()=>{msg.textContent='';msg.style.color='';},rok?3000:9000);
 });
 
 function loadDay(){
@@ -1394,10 +1489,12 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
   const d=document.getElementById('dateEnd').value;
   const cur=saveStore[d]||{};
   saveStore[d]={ score:+document.getElementById('ssRange').value, reset:!!cur.reset, notes:document.getElementById('notes').value };
-  persist();
+  const ok=persist();
   const msg=document.getElementById('savedMsg');
-  msg.textContent=`Saved ${d}: ${saveStore[d].score}/10 ✓`;
-  setTimeout(()=>msg.textContent='',3000);
+  msg.textContent = ok ? `Saved ${d}: ${saveStore[d].score}/10 ✓`
+                       : `NOT SAVED — ${storageState.msg}`;
+  msg.style.color = ok ? '' : 'var(--red)';
+  setTimeout(()=>{msg.textContent='';msg.style.color='';},ok?3000:9000);
   renderDash(); render();
 });
 
@@ -1408,6 +1505,12 @@ document.getElementById('notes').addEventListener('input',()=>{
 
 // restore saved history, jump to today, and render
 restoreState();
+// Report storage health immediately on open — a failure should be visible before
+// you type anything, not discovered after you lose a day's entry.
+if(storageState.ok && !storageState.msg){
+  try{ storageState.bytes = (localStorage.getItem(LS_KEY)||'').length; }catch(e){}
+}
+renderStorageBanner();
 document.getElementById('dateEnd').value = new Date().toISOString().slice(0,10);
 loadDay();
 
