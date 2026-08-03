@@ -1101,11 +1101,34 @@ const LS_KEY='runledger_scores_v2';          // v2: run samples no longer cached
 const saveStore={};                           // date -> { score:0-10, reset:bool, notes:string }
 let ssTouched=false;
 
+/* Collapse allSamples to date → zone → steps. Lossless for every downstream use:
+   buildRows only reads (zone of v, steps), and samples are only ever filtered by date.
+   Steps whose speed falls in no zone are kept under "_" so strydStepsOn stays exact. */
+function compactSamples(){
+  const out={};
+  for(const s of allSamples){
+    const z = assignZone(s.v) || "_";
+    (out[s.date] = out[s.date] || {});
+    out[s.date][z] = (out[s.date][z] || 0) + s.steps;
+  }
+  return out;
+}
+const ZONE_LO = {}; ZONES.forEach(z => ZONE_LO[z.name] = z.lo);   // lo always lands inside its own zone
+function expandSamples(obj){
+  const out=[];
+  for(const date in obj){
+    for(const z in obj[date]){
+      const v = (z==="_") ? 99999 : ZONE_LO[z];   // 99999 ≥ SPIKE_MPS → assignZone returns null
+      if(v===undefined) continue;
+      out.push({date, v, steps:obj[date][z]});
+    }
+  }
+  return out;
+}
+
 let storageOK = null, storageErr = '';
 function persist(){
-  // Persist ONLY structural scores. Run samples are NEVER cached — they are always
-  // rebuilt from the source files on import, so stale classifications can't survive.
-  const payload = JSON.stringify({saveStore, healthSteps});
+  const payload = JSON.stringify({saveStore, healthSteps, samples:compactSamples()});
   try{
     localStorage.setItem(LS_KEY, payload);
     const back = localStorage.getItem(LS_KEY);      // read back — a write that vanishes is not a write
@@ -1114,7 +1137,7 @@ function persist(){
   }catch(e){
     storageOK=false;
     storageErr = (e && e.name==='QuotaExceededError')
-      ? 'storage full or blocked (QuotaExceededError — Private Browsing does this)'
+      ? 'storage full (QuotaExceededError)'
       : ('storage threw: ' + (e && (e.name||e.message) || 'unknown'));
   }
   showStorageBanner();
@@ -1140,6 +1163,10 @@ function restoreState(){
     if(!s){ const old=JSON.parse(localStorage.getItem('runledger_state_v1')||'null'); if(old&&old.saveStore) s={saveStore:old.saveStore}; } // carry scores forward, drop old samples
     if(s) Object.assign(saveStore, s.saveStore||{});
     if(s) Object.assign(healthSteps, s.healthSteps||{});
+    if(s && s.samples){
+      const restored = expandSamples(s.samples);
+      if(restored.length) allSamples = allSamples.concat(restored);
+    }
     try{ localStorage.removeItem('runledger_state_v1'); }catch(e){}   // purge old cached samples for good
   }catch(e){}
 }
