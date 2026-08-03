@@ -150,30 +150,33 @@
 <script>
 /* ══ movements ═══════════════════════════════════════════ */
 const EX = {
-  pc:{n:"Power clean",s:"lower",g:"Power"},
-  sld:{n:"Straight-leg deadlift",s:"lower",g:"Hinge"},
-  tsl:{n:"Trap bar single-leg DL",s:"lower",g:"Hinge"},
-  gbm:{n:"Glute bridge machine",s:"lower",g:"Hip"},
-  ghr:{n:"Glute-ham raise",s:"lower",g:"Hip",bw:1},
-  lex:{n:"Leg extension",s:"lower",g:"Knee"},
-  lcu:{n:"Leg curl",s:"lower",g:"Knee"},
-  cra:{n:"Standing calf raise",s:"lower",g:"Lower leg"},
-  tib:{n:"Tibialis raise",s:"lower",g:"Lower leg"},
-  pla:{n:"Planche progression",s:"upper",g:"Skill strength",iso:1,bw:1,
+  /* ── PUSH ── */
+  pla:{n:"Planche progression",s:"push",g:"Skill strength",iso:1,bw:1,
        vars:["Tuck","Adv. tuck","Straddle","Half lay","Full"]},
-  fle:{n:"Ring front lever",s:"upper",g:"Skill strength",iso:1,bw:1,
+  bp:{n:"Bench press",s:"push",g:"Press"},
+  pu:{n:"Push-ups",s:"push",g:"Press",bw:1},
+  sap:{n:"Standing single-arm press",s:"push",g:"Press"},
+  blr:{n:"Banded lateral raise",s:"push",g:"Shoulders",bw:1},
+  wlr:{n:"Weighted lateral raise",s:"push",g:"Shoulders"},
+  ctp:{n:"Cable triceps pushdown",s:"push",g:"Arms"},
+  /* ── PULL ── */
+  fle:{n:"Ring front lever",s:"pull",g:"Skill strength",iso:1,bw:1,
        vars:["Tuck","Adv. tuck","One-leg","Straddle","Full"]},
-  bp:{n:"Bench press",s:"upper",g:"Press"},
-  pu:{n:"Push-ups",s:"upper",g:"Press",bw:1},
-  sap:{n:"Standing single-arm press",s:"upper",g:"Press"},
-  wpu:{n:"Weighted neutral pull-up",s:"upper",g:"Pull",bw:1},
-  rap:{n:"Ring archer pull-up",s:"upper",g:"Pull",bw:1},
-  hcr:{n:"Standing high cable row",s:"upper",g:"Pull"},
-  blr:{n:"Banded lateral raise",s:"upper",g:"Shoulders",bw:1},
-  wlr:{n:"Weighted lateral raise",s:"upper",g:"Shoulders"},
-  idc:{n:"Incline dumbbell curl",s:"upper",g:"Arms"},
-  ctp:{n:"Cable triceps pushdown",s:"upper",g:"Arms"},
-  fw:{n:"Forearm work",s:"upper",g:"Forearms"}
+  pc:{n:"Power clean",s:"pull",g:"Power"},
+  sld:{n:"Straight-leg deadlift",s:"pull",g:"Hinge"},
+  wpu:{n:"Weighted neutral pull-up",s:"pull",g:"Vertical pull",bw:1},
+  rap:{n:"Ring archer pull-up",s:"pull",g:"Vertical pull",bw:1},
+  hcr:{n:"Standing high cable row",s:"pull",g:"Horizontal pull"},
+  idc:{n:"Incline dumbbell curl",s:"pull",g:"Arms"},
+  fw:{n:"Forearm work",s:"pull",g:"Forearms"},
+  /* ── LEGS ── */
+  tsl:{n:"Trap bar single-leg DL",s:"legs",g:"Hinge"},
+  gbm:{n:"Glute bridge machine",s:"legs",g:"Hip"},
+  ghr:{n:"Glute-ham raise",s:"legs",g:"Hip",bw:1},
+  lex:{n:"Leg extension",s:"legs",g:"Knee"},
+  lcu:{n:"Leg curl",s:"legs",g:"Knee"},
+  cra:{n:"Standing calf raise",s:"legs",g:"Lower leg"},
+  tib:{n:"Tibialis raise",s:"legs",g:"Lower leg"}
 };
 const IDS = Object.keys(EX);
 
@@ -294,10 +297,10 @@ function home(){
   const c = s => IDS.filter(i => EX[i].s===s).length;
   return '<div class="bar">'
     + '<div><div class="eyebrow" style="color:var(--bone);font-size:12px">Ledger</div>'
-    + '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.16em;margin-top:4px">v0.2</div></div>'
+    + '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.16em;margin-top:4px">v0.3</div></div>'
     + '<div class="eyebrow">'+dayLabel(today)+'</div></div>'
     + '<div style="padding:26px 18px 10px">'
-    + [["upper","Upper",c("upper")],["lower","Lower",c("lower")],["bounded","Bounded","ANY · HALF"]]
+    + [["push","Push",c("push")],["pull","Pull",c("pull")],["legs","Legs",c("legs")]]
         .map(a => '<button class="slab" data-session="'+a[0]+'">'+a[1]+'<span>'+a[2]+'</span></button>').join("")
     + '</div>'
     + '<div style="display:flex;gap:8px;padding:0 18px 20px">'
@@ -311,7 +314,7 @@ function home(){
 }
 
 function list(){
-  const ids = S.session==="bounded" ? IDS : IDS.filter(i => EX[i].s===S.session);
+  const ids = IDS.filter(i => EX[i].s===S.session);
   const today = dayKey(Date.now());
   const c = {}; dayOf(today).forEach(e => { if(kindOf(e)==="work") c[e.ex]=(c[e.ex]||0)+1; });
   const groups = {};
