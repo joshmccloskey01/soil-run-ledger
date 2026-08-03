@@ -170,6 +170,21 @@
   .catcard.red .catname{color:var(--red)}
   .catdesc{display:block;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0;margin-top:2px}
   .catstats{display:flex;gap:14px;flex:0 0 auto}
+  .govrow{width:100%;display:flex;align-items:center;gap:12px;padding:15px 14px}
+  .catcard.green .govrow{background:rgba(123,220,58,.08)}
+  .catcard.teal .govrow{background:rgba(45,212,191,.08)}
+  .catcard.orange .govrow{background:rgba(255,133,11,.08)}
+  .catcard.red .govrow{background:rgba(255,56,61,.08)}
+  .catcard.spent{opacity:.55}
+  .govtrack2{height:6px;border-radius:4px;background:rgba(255,255,255,.10);overflow:hidden;margin:9px 14px 13px}
+  .govtrack2 .bfill{height:100%;display:block}
+  .govstate{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+            padding:3px 9px;border-radius:7px;border:1px solid currentColor;flex:0 0 auto}
+  .govstate.green{color:var(--green)} .govstate.teal{color:var(--teal)}
+  .govstate.orange{color:var(--orange)} .govstate.red{color:var(--red)}
+  .govverdict{font-size:13px;line-height:1.7;margin:2px 0 14px;color:var(--muted);font-weight:700}
+  .govverdict b{font-weight:800}
+  .govverdict .vg{color:var(--green)} .govverdict .vo{color:var(--orange)} .govverdict .vr{color:var(--red)}
   .cstat{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;text-align:right;display:flex;flex-direction:column}
   .cstat b{font-size:17px;color:#fff;font-weight:900;line-height:1.1}
   .chev{font-size:16px;color:var(--muted);flex:0 0 auto}
@@ -636,34 +651,38 @@ function renderGovernor(end){
   else if(worst.pctLeft <= 65)             { status='Good'; cls='good'; }
   else                                     { status='Fresh'; cls='fresh'; }
 
-  const COLOR = {STRUCTURE:'var(--green)', CRUISE:'var(--teal)', RUN:'var(--orange)', SPEED:'var(--red)'};
-  const rows = cls4.map(c => `
-    <div style="display:grid;grid-template-columns:1.15fr 1fr 1.5fr;gap:10px;align-items:center;
-                padding:9px 0;border-bottom:1px solid var(--line)">
-      <div style="font-weight:900;font-size:14px;color:${COLOR[c.name]};letter-spacing:.3px">
-        ${c.icon} ${c.name}</div>
-      <div style="font-size:13px;color:var(--muted);font-weight:700">
-        ${fmt1(c.used)} <span style="opacity:.6">/ ${fmt1(c.cap)}</span></div>
-      <div>
-        <div style="height:7px;border-radius:4px;background:rgba(255,255,255,.10);overflow:hidden">
-          <div style="height:100%;width:${Math.max(0,Math.min(100,c.pctLeft))}%;background:${COLOR[c.name]}"></div>
-        </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px;font-weight:700">
-          ${c.state==='locked' ? 'locked by readiness' : c.state==='exhausted' ? 'exhausted' : fmt1(c.remaining)+' left'}</div>
+  const STATE_TXT = {available:'Available', nearly:'Nearly spent', exhausted:'Spent', locked:'Locked'};
+  const rows = cls4.map(c => {
+    const g = GROUPS[c.name];
+    const dim = (c.state==='exhausted'||c.state==='locked') ? ' spent' : '';
+    return `
+    <div class="catcard ${g.color}${dim}">
+      <div class="govrow">
+        <span class="caticon">${g.icon}</span>
+        <span class="catname">${c.name}<span class="catdesc">${g.desc}</span></span>
+        <span class="catstats">
+          <span class="cstat"><b>${fmt1(c.used)}</b>used</span>
+          <span class="cstat"><b>${fmt1(c.cap)}</b>cap</span>
+          <span class="cstat"><b>${c.state==='locked'?'&mdash;':fmt1(c.remaining)}</b>left</span>
+        </span>
+        <span class="govstate ${g.color}">${STATE_TXT[c.state]}</span>
       </div>
-    </div>`).join('');
+      <div class="govtrack2"><span class="bfill ${g.color}"
+           style="width:${c.state==='locked'?0:Math.max(0,Math.min(100,c.pctLeft))}%"></span></div>
+    </div>`;
+  }).join('');
 
   const open = cls4.filter(c=>c.state==='available').map(c=>c.name);
   const low  = cls4.filter(c=>c.state==='nearly').map(c=>c.name);
   const shut = cls4.filter(c=>c.state==='exhausted').map(c=>c.name);
   const lock = cls4.filter(c=>c.state==='locked').map(c=>c.name);
   const verdict = [
-    open.length ? `<b style="color:var(--green)">Still admissible:</b> ${open.map(cap1).join(', ')}` : '',
-    low.length  ? `<b style="color:var(--orange)">Nearly spent:</b> ${low.map(cap1).join(', ')}` : '',
-    shut.length ? `<b style="color:var(--red)">Spent:</b> ${shut.map(cap1).join(', ')}` : '',
-    lock.length ? `<b style="color:var(--red)">Locked:</b> ${lock.map(cap1).join(', ')}` : ''
+    open.length ? `<b class="vg">Still admissible:</b> ${open.map(cap1).join(', ')}` : '',
+    low.length  ? `<b class="vo">Nearly spent:</b> ${low.map(cap1).join(', ')}` : '',
+    shut.length ? `<b class="vr">Spent:</b> ${shut.map(cap1).join(', ')}` : '',
+    lock.length ? `<b class="vr">Locked:</b> ${lock.map(cap1).join(', ')}` : ''
   ].filter(Boolean).join(' &nbsp;&middot;&nbsp; ')
-    || `<b style="color:var(--red)">Nothing admissible today.</b>`;
+    || `<b class="vr">Nothing admissible today.</b>`;
 
   const why = rec.factors.map(f=>`<span class="gwline">&middot; ${f}</span>`).join('');
 
@@ -673,8 +692,8 @@ function renderGovernor(end){
         <div class="govtitle">&#9878;&#65039; Adaptation Governor &mdash; Today's Exposure Budgets</div>
         <div class="govchip ${cls}">${status}</div>
       </div>
-      <div style="font-size:15px;line-height:1.6;margin:4px 0 12px">${verdict}</div>
-      <div style="margin-bottom:10px">${rows}</div>
+      <div class="govverdict">${verdict}</div>
+      <div>${rows}</div>
       <div class="govsub"><b>${fmt1(used)}</b> of ${fmt1(rec.budget)} total units used today &middot; ${fmt1(remaining)} left across all classes</div>
       <div class="govwhy">${why}</div>
       <div class="govengine">Engine: ${GovernorEngine.name}</div>
@@ -1200,7 +1219,7 @@ function expandSamples(obj){
   return out;
 }
 
-const BUILD = "2026-08-03-e";
+const BUILD = "2026-08-03-f";
 function updateBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   let bytes=0, days=0;
