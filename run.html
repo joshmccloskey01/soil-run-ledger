@@ -1104,13 +1104,14 @@ let ssTouched=false;
 function persist(){
   // Persist ONLY structural scores. Run samples are NEVER cached — they are always
   // rebuilt from the source files on import, so stale classifications can't survive.
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore})); }catch(e){}
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore, healthSteps})); }catch(e){}
 }
 function restoreState(){
   try{
     let s=JSON.parse(localStorage.getItem(LS_KEY)||'null');
     if(!s){ const old=JSON.parse(localStorage.getItem('runledger_state_v1')||'null'); if(old&&old.saveStore) s={saveStore:old.saveStore}; } // carry scores forward, drop old samples
     if(s) Object.assign(saveStore, s.saveStore||{});
+    if(s) Object.assign(healthSteps, s.healthSteps||{});
     try{ localStorage.removeItem('runledger_state_v1'); }catch(e){}   // purge old cached samples for good
   }catch(e){}
 }
