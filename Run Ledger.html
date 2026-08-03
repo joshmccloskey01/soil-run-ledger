@@ -37,7 +37,7 @@
 
   /* Summary rows */
   .summary{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);margin-bottom:14px}
-  .srow{display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr 1fr 1fr;border-bottom:1px solid var(--line)}
+  .srow{display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr 1fr;border-bottom:1px solid var(--line)}
   .metricgrid{display:contents}
   .srow:last-child{border-bottom:0}
   .stitle{display:flex;align-items:center;gap:10px;padding:12px;border-right:1px solid var(--line)}
@@ -74,8 +74,7 @@
   .dot.green{background:var(--green)} .dot.teal{background:var(--teal)} .dot.orange{background:var(--orange)} .dot.red{background:var(--red)}
   .exp.green{color:var(--green)} .exp.teal{color:var(--teal)} .exp.orange{color:var(--orange)} .exp.red{color:var(--red)}
 
-  .totalbar{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line)}
-  .totalbar.six{grid-template-columns:repeat(6,1fr)}
+  .totalbar{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line)}
   .titem{padding:15px 12px;border-right:1px solid var(--line);display:flex;gap:11px;align-items:center}
   .titem:last-child{border-right:0}
   .tcircle{width:44px;height:44px;border:2px solid currentColor;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex:0 0 auto}
@@ -148,7 +147,40 @@
   .govwhy b{color:#fff;font-weight:800}
   .govwhy .gwline{display:block;padding-left:14px;text-indent:-14px}
   .govengine{margin-top:10px;font-size:10px;color:rgba(182,189,199,.6);text-transform:uppercase;font-weight:700;letter-spacing:1px}
-  @media(max-width:720px){ .gov{padding:14px} .govbig{font-size:36px} }
+  .govnote{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+
+  /* Four separate accounts — one card each, deliberately not summed */
+  .zgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+  .zgov{border:1px solid var(--line);border-radius:12px;padding:14px;background:rgba(0,0,0,.28)}
+  .zgov.green{border-color:rgba(123,220,58,.45);background:rgba(123,220,58,.05)}
+  .zgov.teal{border-color:rgba(45,212,191,.45);background:rgba(45,212,191,.05)}
+  .zgov.orange{border-color:rgba(255,133,11,.45);background:rgba(255,133,11,.05)}
+  .zgov.red{border-color:rgba(255,56,61,.45);background:rgba(255,56,61,.05)}
+  .zgtop{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+  .zgname{font-size:13px;font-weight:900;letter-spacing:.5px;color:#fff;display:flex;align-items:center;gap:7px}
+  .zgov.green .zgname{color:var(--green)} .zgov.teal .zgname{color:var(--teal)}
+  .zgov.orange .zgname{color:var(--orange)} .zgov.red .zgname{color:var(--red)}
+  .zgicon{font-size:17px}
+  .zgbig{font-size:30px;font-weight:900;color:#fff;line-height:1;letter-spacing:-.8px}
+  .zgbig small{font-size:12px;color:var(--muted);font-weight:800;letter-spacing:0}
+  .zgsub{font-size:12px;color:var(--muted);font-weight:700;margin:4px 0 9px}
+  .zgsub b{color:#fff}
+  .zgov .govtrack{height:10px}
+  .zgov .govwhy{margin-top:9px;font-size:11px;line-height:1.5}
+
+  /* Limit editor */
+  .limitrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px;align-items:end}
+  .limlabel{grid-column:1/-1;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:800}
+  .limbox{display:flex;flex-direction:column;gap:4px;font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted)}
+  .limbox.green{color:var(--green)} .limbox.teal{color:var(--teal)}
+  .limbox.orange{color:var(--orange)} .limbox.red{color:var(--red)}
+  .liminput{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:8px;color:#fff;font-size:15px;font-weight:800;padding:7px 9px;font-family:inherit;width:100%}
+  .liminput:focus{outline:none;border-color:var(--purple)}
+  @media(max-width:720px){
+    .gov{padding:14px} .govbig{font-size:36px}
+    .zgrid{grid-template-columns:1fr}
+    .limitrow{grid-template-columns:1fr 1fr}
+  }
 
   /* Category cards (tap to expand) */
   .catcard{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden;background:rgba(0,0,0,.25)}
@@ -206,7 +238,7 @@
     .srow{display:block;padding:12px}
     .stitle{border-right:0;padding:0 0 10px 0;border-bottom:1px solid var(--line);margin-bottom:10px}
     .summary .srow{display:block}
-    .metricgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+    .metricgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
     .scell{border-right:0;padding:4px 1px;text-align:center;align-items:center;justify-content:flex-start}
     .scell .n{font-size:11px;line-height:1.15;white-space:nowrap}
     .scell .v{font-size:18px;margin-top:4px}
@@ -222,7 +254,7 @@
     .dot{width:9px;height:9px;margin-right:6px}
     table colgroup col:first-child{width:34% !important}
     table colgroup col:not(:first-child){width:16.5% !important}
-    .totalbar,.totalbar.six{grid-template-columns:1fr 1fr}
+    .totalbar{grid-template-columns:1fr 1fr}
     .titem{padding:12px 8px}
     .tval{font-size:20px}
     .cards{grid-template-columns:1fr}
@@ -235,7 +267,7 @@
   <div class="head">
     <div>
       <h1>Josh Run Ledger <span class="badge">web</span></h1>
-      <div class="sub">Displayed Exposure = Relative Forces</div>
+      <div class="sub">Four step accounts &middot; no conversion between them</div>
     </div>
     <div class="datebox">
       <div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">Window end</div>
@@ -276,7 +308,7 @@
     <div class="noteswrap">
       <label>📱 Total Steps Today (from the Health app)</label>
       <input type="number" id="healthSteps" class="hsinput" min="0" step="1" placeholder="e.g. 9500" inputmode="numeric">
-      <div class="hshint">Steps beyond what Stryd captured get booked as 🏛️ Ambient — the 12:00+ slowest band (load ×0.1)</div>
+      <div class="hshint">Steps beyond what the run captured get booked as 🏛️ Ambient — the 12:00+ band of your Structure account</div>
       <div class="hshint" id="hsBreakdown"></div>
     </div>
     <div class="noteswrap">
@@ -302,9 +334,10 @@ const GROUPS = {
 const SPIKE_KMH = 32;                   // GPS/driving spikes at/above this speed are ignored
 const SPIKE_MPS = SPIKE_KMH / 3.6;      // 8.889 m/s — anything this fast is dropped
 // lo/hi are now SPEED bounds in m/s (canonical). Display labels stay min/km. Higher m/s = faster.
-// NOTE (2026-07-21): exposure scale divided by 10. Every band's `load` below is
-// 1/10 of its original value, so all exposure figures now read on a ~0–200 scale
-// (was ~0–2000). Daily allowance set to 200 to match — see DAILY_LIMIT.
+// `load` below is the raw force figure. It is never displayed or used directly
+// — normalizeBandForce() divides it by its account's maximum to produce `rel`,
+// which is what the app shows. It orders bands INSIDE an account and nothing
+// more; it is never used to convert steps from one account into another.
 const ZONES = [
   {group:"STRUCTURE", name:"Power Walk", short:"Power Walk", pace:"7:00–8:00 /km",   lo:2.083, hi:2.381, load:0.06, kind:"walk",   color:"green"},
   {group:"STRUCTURE", name:"Brisk Walk", short:"Brisk Walk", pace:"8:00–9:00 /km",   lo:1.852, hi:2.083, load:0.052, kind:"walk",   color:"green"},
@@ -333,7 +366,39 @@ const ZONES = [
   {group:"SPEED", name:"1:30–1:45", short:"1:30–1:45", pace:"/km", lo:9.524, hi:999,   load:0.2, kind:"speed", color:"red"},
 ];
 
-let allSamples = []; // {date:'YYYY-MM-DD', v (m/s), steps}
+// ---------- BAND FORCE, NORMALIZED PER ACCOUNT ----------
+// Force is only ever compared inside an account, so each account gets its own
+// ceiling: the fastest band in the account is 1.00 and every slower band reads
+// as a fraction of it. Divide each raw load by the account's max. Nothing here
+// crosses an account boundary — a 1.00 in Structure and a 1.00 in Speed are
+// both "the top of this account" and are not the same force.
+(function normalizeBandForce(){
+  for(const gname of Object.keys(GROUPS)){
+    const zs = ZONES.filter(z=>z.group===gname);
+    const max = Math.max(...zs.map(z=>z.load));
+    zs.forEach(z=> z.rel = max>0 ? z.load/max : 0);
+  }
+})();
+
+// Steps are the measured unit. Every sample carries a real step count from
+// cadence; minutes are derived from sample intervals and shown for context only.
+// The Health-app remainder arrives as steps with no clock, so its minutes are
+// estimated at this cadence — another reason the budget rides on steps.
+const AMBIENT_CADENCE_SPM = 100;
+
+// ---------- FOUR SEPARATE BUDGETS ----------
+// One step account per zone, per day. No exchange rate between them: a walking
+// step does not buy a sprint step, because walking volume does not produce the
+// tissue tolerance sprinting demands. Overspending Structure costs little;
+// overspending Speed hurts. One pooled number cannot score both.
+const ZONE_LIMIT_DEFAULTS = { STRUCTURE:12000, CRUISE:3000, RUN:1500, SPEED:300 };
+let zoneLimits = {...ZONE_LIMIT_DEFAULTS};
+
+// Readiness cuts apply to the running zones. Structure is restorative — it is
+// capped by its own limit and nothing else.
+const READINESS_APPLIES = { STRUCTURE:false, CRUISE:true, RUN:true, SPEED:true };
+
+let allSamples = []; // {date:'YYYY-MM-DD', v (m/s), steps, secs}
 
 // ---------- CSV parsing (mirrors app.py logic) ----------
 function findCol(cols, keywords, avoid=[]){
@@ -393,7 +458,7 @@ function parseCsvText(name, rows){
     const ms = toMs(raw[i].ts);
     if(ms!=null){ const dObj=new Date(ms); dstr=dObj.getFullYear()+'-'+String(dObj.getMonth()+1).padStart(2,'0')+'-'+String(dObj.getDate()).padStart(2,'0'); }
     else { dstr = document.getElementById('dateEnd').value; }
-    out.push({date:dstr, v, steps});
+    out.push({date:dstr, v, steps, secs:dt});
   }
   return out;
 }
@@ -414,7 +479,7 @@ function assignZone(v){
 // ---------- Aggregation ----------
 // ---------- Apple Health total-steps bridge (manual entry) ----------
 // You type your daily total from the Health app; whatever Stryd didn't
-// capture is booked into 🏛️ Walking (slowest band, load 0 → no exposure).
+// capture is booked into 🏛️ Ambient — the slowest band of the Structure account.
 const healthSteps = {}; // date -> total steps that day
 
 function strydStepsOn(date){
@@ -441,35 +506,52 @@ function aggregateAll(){
 }
 
 function buildRows(samples, extraWalkSteps=0){
-  const byZone={};
-  ZONES.forEach(z=>byZone[z.name]=0);
+  const byZone={}, secsByZone={};
+  ZONES.forEach(z=>{ byZone[z.name]=0; secsByZone[z.name]=0; });
   for(const s of samples){
     const zn=assignZone(s.v);
-    if(zn) byZone[zn]+=s.steps;
+    if(zn){ byZone[zn]+=s.steps; secsByZone[zn]+=(s.secs||0); }
   }
   byZone['Ambient'] += extraWalkSteps; // Health-app remainder → slowest band (12:00+)
+  secsByZone['Ambient'] += extraWalkSteps/AMBIENT_CADENCE_SPM*60;  // time is derived here, steps are the measured thing
   const rows = ZONES.map(z=>{
     const steps=byZone[z.name];
-    return {...z, steps,
+    return {...z, steps, mins: secsByZone[z.name]/60,
       walk:   z.kind==='walk'  ?steps:0,
       cruise: z.kind==='cruise'?steps:0,
       run:    z.kind==='run'   ?steps:0,
       speed:  z.kind==='speed' ?steps:0,
-      exposure: steps*z.load };
+      exposure: steps*z.rel };   // steps expressed at this account's top band
   });
+  // Per-zone step counts. These are FOUR SEPARATE LEDGERS — they are never
+  // summed, and nothing converts between them. Walking steps cannot buy
+  // sprint steps; the adaptations aren't the same and don't trade.
+  const zoneSteps={}, zoneMins={}, zoneExp={};
+  for(const gname of Object.keys(GROUPS)){
+    const grows = rows.filter(r=>r.group===gname);
+    zoneSteps[gname] = grows.reduce((a,r)=>a+r.steps,0);
+    zoneMins[gname]  = grows.reduce((a,r)=>a+r.mins,0);
+    zoneExp[gname]   = grows.reduce((a,r)=>a+r.exposure,0);
+  }
   const totals={
-    exposure: rows.reduce((a,r)=>a+r.exposure,0),
+    zoneSteps, zoneMins, zoneExp,
     walk:   rows.reduce((a,r)=>a+r.walk,0),
     cruise: rows.reduce((a,r)=>a+r.cruise,0),
     run:    rows.reduce((a,r)=>a+r.run,0),
     speed:  rows.reduce((a,r)=>a+r.speed,0),
-    walkExp:   rows.reduce((a,r)=>a+(r.kind==='walk'  ?r.exposure:0),0),
-    cruiseExp: rows.reduce((a,r)=>a+(r.kind==='cruise'?r.exposure:0),0),
-    runExp:    rows.reduce((a,r)=>a+(r.kind==='run'   ?r.exposure:0),0),
-    speedExp:  rows.reduce((a,r)=>a+(r.kind==='speed' ?r.exposure:0),0),
+    walkExp:   zoneExp.STRUCTURE, cruiseExp: zoneExp.CRUISE,
+    runExp:    zoneExp.RUN,       speedExp:  zoneExp.SPEED,
   };
   const totAllSteps = totals.walk+totals.cruise+totals.run+totals.speed;
+  // % is share-of-day for reading the distribution only — never a budget.
   rows.forEach(r=> r.pct = totAllSteps>0 ? r.steps/totAllSteps*100 : 0);
+  // Within a zone, bands are compared to each other by load. That comparison
+  // stops at the zone edge.
+  for(const gname of Object.keys(GROUPS)){
+    const grows = rows.filter(r=>r.group===gname);
+    const zs = zoneSteps[gname];
+    grows.forEach(r=> r.zpct = zs>0 ? r.steps/zs*100 : 0);
+  }
   return {rows, totals, totAllSteps};
 }
 
@@ -478,51 +560,65 @@ function fmt1(x){ return (Math.round(x*10)/10).toLocaleString(undefined,{minimum
 
 // ========================================================================
 // ADAPTATION GOVERNOR — the primary output of the app.
-// The ledger records what happened; the Governor interprets the ledger
-// and recommends today's allowable exposure.
+// The ledger records what happened; the Governor interprets it and sets
+// FOUR separate daily step allowances — one per account, no exchange rate.
 //
 // It is a pluggable component. Any engine implementing:
-//     recommend(inputs) -> { budget:Number, factors:[htmlString] }
+//     recommend(inputs) -> { ZONE: {budget:Number, factors:[htmlString]} }
 // can replace RuleBasedGovernor without touching the UI — e.g. the
 // General Intelligence engine later. `inputs` is a complete snapshot:
 //   { date, usedToday, acuteAvg, chronicAvg, activeDays7, activeDays28,
-//     structScore, notes, history:[{date,exposure}] }
+//     structScore, notes, history:[{date, steps:{ZONE:Number}}] }
+//   usedToday / acuteAvg / chronicAvg are per-zone step objects.
 // ========================================================================
 
 const RuleBasedGovernor = {
-  name: 'Rule-based v1',
+  name: 'Rule-based v2 — four accounts, steps',
 
+  // Returns one budget per zone. Each is computed from that zone's own history
+  // only. No zone's spending affects another's allowance.
   recommend(inputs){
+    const out = {};
+    for(const gname of Object.keys(GROUPS)){
+      out[gname] = this._zone(gname, inputs);
+    }
+    return out;
+  },
+
+  _zone(gname, inputs){
     const factors = [];
-    let budget;
+    const LIMIT = zoneLimits[gname];
+    let budget = LIMIT;
+    const acute = inputs.acuteAvg[gname] || 0;
+    const chronic = inputs.chronicAvg[gname] || 0;
 
-    // 1. Baseline = your set daily structure limit (readiness adjusts it below)
-    const DAILY_LIMIT = 200;    // exposure allowance (was 2000; ÷10 rescale 2026-07-21)
-    budget = DAILY_LIMIT;
-    factors.push(`Daily structure limit <b>${fmt1(DAILY_LIMIT)}</b>` + (inputs.chronicAvg > 0 ? ` — your 4-week avg is ${fmt1(inputs.chronicAvg)}/day` : ``));
+    factors.push(`Daily ${gname.toLowerCase()} limit <b>${fmtInt(LIMIT)}</b> steps`
+      + (chronic > 0 ? ` — 4-week avg ${fmtInt(chronic)}/day` : ``));
 
-    // 2. Acute:chronic guard — recent week running hot vs the month
-    if(inputs.chronicAvg > 0 && inputs.acuteAvg > inputs.chronicAvg * 1.3){
+    // Acute:chronic guard, run on this zone's own steps
+    if(chronic > 0 && acute > chronic * 1.3){
       budget *= 0.85;
-      factors.push(`7-day load is hot: ${fmt1(inputs.acuteAvg)}/day vs ${fmt1(inputs.chronicAvg)} chronic → ×0.85`);
+      factors.push(`7-day ${gname.toLowerCase()} is hot: ${fmtInt(acute)}/day vs ${fmtInt(chronic)} chronic → ×0.85`);
     }
 
-    // 3. Body readiness — leg + back scores
-    budget *= this._scoreMult(inputs.structScore, 'Structural', factors);
+    if(READINESS_APPLIES[gname]){
+      budget *= this._scoreMult(inputs.structScore, factors);
 
-    // 4. Notes scan — flag words pull the budget down
-    const flagWords = ['pain','sore','hurt','tight','niggle','tired','ache','strain','pull'];
-    const hit = inputs.notes ? flagWords.find(w => inputs.notes.toLowerCase().includes(w)) : null;
-    if(hit){
-      budget *= 0.85;
-      factors.push(`Today's notes mention “${hit}” → ×0.85`);
+      const flagWords = ['pain','sore','hurt','tight','niggle','tired','ache','strain','pull'];
+      const hit = inputs.notes ? flagWords.find(w => inputs.notes.toLowerCase().includes(w)) : null;
+      if(hit){
+        budget *= 0.85;
+        factors.push(`Today's notes mention “${hit}” → ×0.85`);
+      }
+    } else {
+      factors.push(`Restorative — readiness doesn't cut this account`);
     }
 
-    budget = Math.max(DAILY_LIMIT*0.2, Math.round(budget)); // floor at 20% of the limit
+    budget = Math.max(Math.round(LIMIT*0.2), Math.round(budget)); // floor at 20%
     return { budget, factors };
   },
 
-  _scoreMult(score, label, factors){
+  _scoreMult(score, factors){
     if(score == null){
       factors.push(`Structural score not set — assuming in band (×1.0)`);
       return 1.0;
@@ -545,68 +641,109 @@ function activeDaysIn(start, end){
   return new Set(allSamples.filter(s=>s.date>=start && s.date<=end).map(s=>s.date)).size;
 }
 
-// Per-day exposure ledger history — passed to the engine so a future AI
-// engine can reason over the full trajectory, not just the averages.
-function dailyExposureHistory(){
-  const loadByZone = {};
-  ZONES.forEach(z => loadByZone[z.name] = z.load);
+// Per-day, per-zone step history — four parallel tracks, never merged, so a
+// future engine reasons over each account's own trajectory.
+function dailyStepHistory(){
+  const groupByZone = {};
+  ZONES.forEach(z => groupByZone[z.name] = z.group);
   const byDate = {};
   for(const s of allSamples){
     const zn = assignZone(s.v);
     if(!zn) continue;
-    byDate[s.date] = (byDate[s.date]||0) + s.steps * loadByZone[zn];
+    const g = groupByZone[zn];
+    if(!byDate[s.date]) byDate[s.date] = {STRUCTURE:0,CRUISE:0,RUN:0,SPEED:0};
+    byDate[s.date][g] += s.steps;
   }
-  return Object.keys(byDate).sort().map(d => ({date:d, exposure:byDate[d]}));
+  return Object.keys(byDate).sort().map(d => ({date:d, steps:byDate[d]}));
 }
 
 function buildGovernorInputs(end){
-  const usedToday = aggregate(end, end).totals.exposure;
+  const usedToday = aggregate(end, end).totals.zoneSteps;
   // trailing windows EXCLUDE today, so the budget doesn't move as you use it
   const wS = shiftDate(end,-7),  wE = shiftDate(end,-1);
   const cS = shiftDate(end,-28), cE = shiftDate(end,-1);
   const wDays = activeDaysIn(wS,wE), cDays = activeDaysIn(cS,cE);
+  const wZ = aggregate(wS,wE).totals.zoneSteps, cZ = aggregate(cS,cE).totals.zoneSteps;
+  const acuteAvg = {}, chronicAvg = {};
+  for(const g of Object.keys(GROUPS)){
+    acuteAvg[g]   = wDays ? wZ[g]/wDays : 0;
+    chronicAvg[g] = cDays ? cZ[g]/cDays : 0;
+  }
   const rec = saveStore[end] || {};
   return {
     date: end,
-    usedToday,
-    acuteAvg:   wDays ? aggregate(wS,wE).totals.exposure/wDays : 0,
-    chronicAvg: cDays ? aggregate(cS,cE).totals.exposure/cDays : 0,
+    usedToday, acuteAvg, chronicAvg,
     activeDays7: wDays, activeDays28: cDays,
     structScore: rec.score != null ? rec.score : (ssTouched ? +document.getElementById('ssRange').value : null),
     notes: document.getElementById('notes').value || rec.notes || '',
-    history: dailyExposureHistory()
+    history: dailyStepHistory()
   };
 }
 
 function renderGovernor(end){
   const inputs = buildGovernorInputs(end);
   const rec = GovernorEngine.recommend(inputs);
-  const used = inputs.usedToday;
-  const remaining = Math.max(0, rec.budget - used);
-  // Bar shows what's LEFT in the tank — full at the start of the day, drains as you spend
-  const pctLeft = rec.budget > 0 ? Math.max(0, Math.min(100, remaining/rec.budget*100)) : 0;
+  const info = {};
+  let cards = '';
 
-  let status, cls;
-  if(used >= rec.budget){ status='Limit Reached'; cls='limit'; }
-  else if(pctLeft <= 30){ status='Caution'; cls='caution'; }
-  else if(pctLeft <= 65){ status='Good'; cls='good'; }
-  else { status='Fresh'; cls='fresh'; }
+  for(const gname of Object.keys(GROUPS)){
+    const g = GROUPS[gname];
+    const budget = rec[gname].budget;
+    const used = inputs.usedToday[gname] || 0;
+    const remaining = Math.max(0, budget - used);
+    const pctLeft = budget > 0 ? Math.max(0, Math.min(100, remaining/budget*100)) : 0;
 
-  const why = rec.factors.map(f=>`<span class="gwline">· ${f}</span>`).join('');
+    let status, cls;
+    if(used >= budget){ status='Spent'; cls='limit'; }
+    else if(pctLeft <= 30){ status='Caution'; cls='caution'; }
+    else if(pctLeft <= 65){ status='Good'; cls='good'; }
+    else { status='Open'; cls='fresh'; }
+
+    info[gname] = {budget, used, remaining, pctLeft, status, cls};
+    const why = rec[gname].factors.map(f=>`<span class="gwline">· ${f}</span>`).join('');
+
+    cards += `
+      <div class="zgov ${g.color}">
+        <div class="zgtop">
+          <div class="zgname"><span class="zgicon">${g.icon}</span>${gname}</div>
+          <div class="govchip ${cls}">${status}</div>
+        </div>
+        <div class="zgbig">${fmtInt(remaining)} <small>/ ${fmtInt(budget)} steps left</small></div>
+        <div class="zgsub"><b>${fmtInt(used)}</b> spent today</div>
+        <div class="govtrack"><div class="govfill ${cls}" style="width:${pctLeft}%"></div></div>
+        <div class="govwhy">${why}</div>
+      </div>`;
+  }
 
   document.getElementById('governor').innerHTML = `
     <div class="gov">
       <div class="govtop">
-        <div class="govtitle">⚖️ Adaptation Governor — Today's Exposure Budget</div>
-        <div class="govchip ${cls}">${status}</div>
+        <div class="govtitle">⚖️ Adaptation Governor — Four Step Accounts</div>
       </div>
-      <div class="govbig">${fmt1(remaining)} <small>/ ${fmt1(rec.budget)} remaining</small></div>
-      <div class="govsub"><b>${fmt1(used)}</b> exposure units used today</div>
-      <div class="govtrack"><div class="govfill ${cls}" style="width:${pctLeft}%"></div></div>
-      <div class="govwhy">${why}</div>
+      <div class="govnote">Each zone has its own daily step budget. Nothing converts between them — walking steps don't buy sprint steps.</div>
+      <div class="zgrid">${cards}</div>
+      <div class="limitrow" id="limitRow"></div>
       <div class="govengine">Engine: ${GovernorEngine.name}</div>
     </div>`;
-  return { budget: rec.budget, used, remaining };
+  renderLimitEditor();
+  return info;
+}
+
+// Daily step limits are yours to set — the governor only trims from here.
+function renderLimitEditor(){
+  const el = document.getElementById('limitRow'); if(!el) return;
+  el.innerHTML = `<div class="limlabel">Daily step limits</div>` + Object.keys(GROUPS).map(g=>`
+    <label class="limbox ${GROUPS[g].color}">
+      <span>${GROUPS[g].icon} ${g}</span>
+      <input type="number" min="0" step="50" value="${zoneLimits[g]}" data-zone="${g}" class="liminput">
+    </label>`).join('');
+  el.querySelectorAll('.liminput').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const z = inp.dataset.zone;
+      const v = Math.max(0, Math.round(+inp.value||0));
+      zoneLimits[z] = v; persist(); render();
+    });
+  });
 }
 function fmtDate(str){
   const [y,m,d]=str.split('-').map(Number);
@@ -620,18 +757,23 @@ function shiftDate(str, days){
 }
 
 // ---------- Render ----------
-function summaryCard(title, sub, t, icon){
+// Four step counts, side by side, never added together.
+function summaryCard(title, sub, zs, icon){
   return `
   <div class="srow">
     <div class="stitle"><div class="sicon">${icon}</div><div><div class="slabel">${title}</div><div class="ssub">${sub}</div></div></div>
     <div class="metricgrid">
-      <div class="scell exp"><div class="n">Σ EXP</div><div class="v">${fmt1(t.exposure)}</div></div>
-      <div class="scell walk"><div class="n">🏛️ STRUCT</div><div class="v">${fmt1(t.walkExp)}</div></div>
-      <div class="scell cruise"><div class="n">🍃 CRUISE</div><div class="v">${fmt1(t.cruiseExp)}</div></div>
-      <div class="scell run"><div class="n">🌿 RUN</div><div class="v">${fmt1(t.runExp)}</div></div>
-      <div class="scell speed"><div class="n">⚡ SPEED</div><div class="v">${fmt1(t.speedExp)}</div></div>
+      <div class="scell walk"><div class="n">🏛️ STRUCT</div><div class="v">${fmtInt(zs.STRUCTURE)}</div></div>
+      <div class="scell cruise"><div class="n">🍃 CRUISE</div><div class="v">${fmtInt(zs.CRUISE)}</div></div>
+      <div class="scell run"><div class="n">🌿 RUN</div><div class="v">${fmtInt(zs.RUN)}</div></div>
+      <div class="scell speed"><div class="n">⚡ SPEED</div><div class="v">${fmtInt(zs.SPEED)}</div></div>
     </div>
   </div>`;
+}
+function avgZoneSteps(agg, days){
+  const out={}; const d = days||1;
+  for(const g of Object.keys(GROUPS)) out[g] = agg.totals.zoneSteps[g]/d;
+  return out;
 }
 
 function render(){
@@ -643,22 +785,10 @@ function render(){
   const today = aggregate(end,end);
   const week = aggregate(weekStart,end);
   const weekActiveDays = new Set(allSamples.filter(s=>s.date>=weekStart && s.date<=end).map(s=>s.date)).size || 1;
-  const weekAvg = {
-    exposure:week.totals.exposure/weekActiveDays, walk:week.totals.walk/weekActiveDays,
-    cruise:week.totals.cruise/weekActiveDays,
-    run:week.totals.run/weekActiveDays, speed:week.totals.speed/weekActiveDays,
-    walkExp:week.totals.walkExp/weekActiveDays, cruiseExp:week.totals.cruiseExp/weekActiveDays,
-    runExp:week.totals.runExp/weekActiveDays, speedExp:week.totals.speedExp/weekActiveDays
-  };
+  const weekAvg = avgZoneSteps(week, weekActiveDays);
   const four = aggregate(fourStart,end);
   const fourActiveDays = new Set(allSamples.filter(s=>s.date>=fourStart && s.date<=end).map(s=>s.date)).size || 1;
-  const fourAvg = {
-    exposure:four.totals.exposure/fourActiveDays, walk:four.totals.walk/fourActiveDays,
-    cruise:four.totals.cruise/fourActiveDays,
-    run:four.totals.run/fourActiveDays, speed:four.totals.speed/fourActiveDays,
-    walkExp:four.totals.walkExp/fourActiveDays, cruiseExp:four.totals.cruiseExp/fourActiveDays,
-    runExp:four.totals.runExp/fourActiveDays, speedExp:four.totals.speedExp/fourActiveDays
-  };
+  const fourAvg = avgZoneSteps(four, fourActiveDays);
 
   // All-time: average per active day across the ENTIRE dataset (ignores window end)
   let allTimeCard = '';
@@ -668,19 +798,13 @@ function render(){
     const lastDate = dates[dates.length-1];
     const activeDays = new Set(allSamples.map(s=>s.date)).size;
     const all = aggregateAll();  // sums EVERY sample, no date filter
-    const allAvg = {
-      exposure:all.totals.exposure/activeDays, walk:all.totals.walk/activeDays,
-      cruise:all.totals.cruise/activeDays,
-      run:all.totals.run/activeDays, speed:all.totals.speed/activeDays,
-      walkExp:all.totals.walkExp/activeDays, cruiseExp:all.totals.cruiseExp/activeDays,
-      runExp:all.totals.runExp/activeDays, speedExp:all.totals.speedExp/activeDays
-    };
+    const allAvg = avgZoneSteps(all, activeDays);
     allTimeCard = summaryCard('ALL-TIME AVG / DAY', fmtDate(first)+' – '+fmtDate(lastDate)+' ('+activeDays+' active days)', allAvg, '∞');
   }
 
   document.getElementById('summary').innerHTML = `
     <div class="summary">
-      ${summaryCard('TODAY', fmtDate(end), today.totals, '▣')}
+      ${summaryCard('TODAY', fmtDate(end), today.totals.zoneSteps, '▣')}
       ${summaryCard('THIS WEEK AVG / DAY', fmtDate(weekStart)+' – '+fmtDate(end)+' ('+weekActiveDays+' active days)', weekAvg, '▥')}
       ${summaryCard('4-WEEK AVG / DAY', fmtDate(fourStart)+' – '+fmtDate(end)+' ('+fourActiveDays+' active days)', fourAvg, '↗')}
       ${allTimeCard}
@@ -709,25 +833,28 @@ function toggleGroup(targetId, gname){
 
 function renderCategories(agg, targetId, label, govInfo){
   const {rows, totals} = agg;
+  const colorOf = {STRUCTURE:'tg', CRUISE:'tt', RUN:'to', SPEED:'tr'};
   let html='';
   for(const gname of Object.keys(GROUPS)){
     const g = GROUPS[gname];
     const grows = rows.filter(r=>r.group===gname);
-    const gSteps = grows.reduce((a,r)=>a+r.steps,0);
-    const gExp   = grows.reduce((a,r)=>a+r.exposure,0);
-    const gPct   = grows.reduce((a,r)=>a+r.pct,0);
+    const gSteps = totals.zoneSteps[gname];
+    const gMins  = totals.zoneMins[gname];
+    const gi     = govInfo ? govInfo[gname] : null;
     const open   = openGroups[targetId].has(gname);
-    const maxPct = Math.max(...grows.map(r=>r.pct), 0.0001);
+    // Bars are scaled inside the zone — a band is compared to its neighbours,
+    // never to bands in another account.
+    const maxSteps = Math.max(...grows.map(r=>r.steps), 0.0001);
 
     let detail='';
     for(const r of grows){
       detail+=`<div class="brow">
         <div class="bz">${r.name}<span class="bpace">${r.pace}</span></div>
-        <div class="bload">×${(+r.load.toFixed(3))}</div>
-        <div class="btrack"><div class="bfill ${g.color}" style="width:${(r.pct/maxPct*100)}%"></div></div>
+        <div class="bload">×${r.rel.toFixed(2)}</div>
+        <div class="btrack"><div class="bfill ${g.color}" style="width:${(r.steps/maxSteps*100)}%"></div></div>
         <div class="bnum">${fmtInt(r.steps)}</div>
-        <div class="bnum">${fmt1(r.exposure)}</div>
-        <div class="bnum bpct">${r.pct.toFixed(1)}%</div>
+        <div class="bnum">${r.mins>0?fmtDur(r.mins):'—'}</div>
+        <div class="bnum bpct">${r.zpct.toFixed(1)}%</div>
       </div>`;
     }
 
@@ -738,15 +865,14 @@ function renderCategories(agg, targetId, label, govInfo){
         <span class="catname">${gname}<span class="catdesc">${g.desc}</span></span>
         <span class="catstats">
           <span class="cstat"><b>${fmtInt(gSteps)}</b>steps</span>
-          <span class="cstat"><b>${fmt1(gExp)}</b>exp</span>
-          <span class="cstat"><b>${gPct.toFixed(1)}%</b>of steps</span>
+          ${gi?`<span class="cstat"><b>${fmtInt(gi.remaining)}</b>left</span>`:`<span class="cstat"><b>${gMins>0?fmtDur(gMins):'—'}</b>time</span>`}
         </span>
         <span class="chev">${open?'▾':'▸'}</span>
       </button>
       <div class="catdetail" ${open?'':'hidden'}>
         <div class="brow bhead">
-          <div class="bz">Band</div><div class="bload">Load</div><div class="btrack" style="background:none"></div>
-          <div class="bnum">Steps</div><div class="bnum">Exp</div><div class="bnum">%</div>
+          <div class="bz">Band</div><div class="bload">Force</div><div class="btrack" style="background:none"></div>
+          <div class="bnum">Steps</div><div class="bnum">Time</div><div class="bnum">% of zone</div>
         </div>
         ${detail}
       </div>
@@ -755,15 +881,16 @@ function renderCategories(agg, targetId, label, govInfo){
 
   document.getElementById(targetId).innerHTML = `
     <div class="panel" style="padding:14px">
-      <div class="ptitle" style="border-bottom:0;padding:0 2px 12px">〽️ ${label} — Exposure by Category</div>
+      <div class="ptitle" style="border-bottom:0;padding:0 2px 12px">〽️ ${label} — Steps by Account</div>
       ${html}
-      <div class="totalbar ${govInfo?'six':''}" style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:12px">
-        <div class="titem"><div class="tcircle tw">Σ</div><div><div class="tlabel">Total Exposure</div><div class="tval tw">${fmt1(totals.exposure)}</div></div></div>
-        ${govInfo?`<div class="titem"><div class="tcircle tp">⚖️</div><div><div class="tlabel">Budget Left</div><div class="tval tp">${fmt1(govInfo.remaining)}</div></div></div>`:''}
-        <div class="titem"><div class="tcircle tg">🏛️</div><div><div class="tlabel">Structure</div><div class="tval tg">${fmtInt(totals.walk)}</div></div></div>
-        <div class="titem"><div class="tcircle tt">🍃</div><div><div class="tlabel">Cruise</div><div class="tval tt">${fmtInt(totals.cruise)}</div></div></div>
-        <div class="titem"><div class="tcircle to">🌿</div><div><div class="tlabel">Run</div><div class="tval to">${fmtInt(totals.run)}</div></div></div>
-        <div class="titem"><div class="tcircle tr">⚡</div><div><div class="tlabel">Speed</div><div class="tval tr">${fmtInt(totals.speed)}</div></div></div>
+      <div class="totalbar" style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:12px">
+        ${Object.keys(GROUPS).map(gname=>{
+          const gi = govInfo ? govInfo[gname] : null;
+          const c = colorOf[gname];
+          return `<div class="titem"><div class="tcircle ${c}">${GROUPS[gname].icon}</div><div>
+            <div class="tlabel">${gname}${gi?' left':''}</div>
+            <div class="tval ${c}">${fmtInt(gi ? gi.remaining : totals.zoneSteps[gname])}</div></div></div>`;
+        }).join('')}
       </div>
     </div>`;
 }
@@ -899,7 +1026,7 @@ function buildHealthSamples(distRows, stepRows){
     const km=distMap[ts]||0, steps=stepMap[ts]||0;
     const kmh = km/(dt/3600);
     const v = kmh>0 ? kmh/3.6 : 0;               // no movement -> 0 m/s (Ambient)
-    samples.push({date:String(ts).split(' ')[0], v, steps});
+    samples.push({date:String(ts).split(' ')[0], v, steps, secs:dt});
   }
   const dayTotals={};
   for(const ts of Object.keys(stepMap)){
@@ -951,11 +1078,11 @@ function routeToSamples(pts, totalSteps, date, mode, halfWinSec){
     let speed, dist;
     if(mode==='apple'){ speed=isFinite(pts[i].spd)?Math.max(0,pts[i].spd):0; dist=speed*dt; }
     else { dist=haversine(P[i-1],P[i]); speed=dist/dt; }
-    segs.push({v: speed>0 ? speed : 0, dist});
+    segs.push({v: speed>0 ? speed : 0, dist, dt});
     totDist+=dist; totTime+=dt;
   }
   if(totDist<=0) return {samples:[], avgV:0, dist:0};
-  const samples=segs.filter(s=>s.dist>0).map(s=>({date, v:s.v, steps: totalSteps*(s.dist/totDist)}));
+  const samples=segs.filter(s=>s.dist>0).map(s=>({date, v:s.v, steps: totalSteps*(s.dist/totDist), secs:s.dt}));
   return {samples, avgV: totTime>0 ? totDist/totTime : 0, dist: totDist/1000};
 }
 // DIAGNOSTIC ONLY — cap intentionally bypassed here so we see the true reading. Production keeps the cap.
@@ -1102,15 +1229,21 @@ const saveStore={};                           // date -> { score:0-10, reset:boo
 let ssTouched=false;
 
 function persist(){
-  // Persist ONLY structural scores. Run samples are NEVER cached — they are always
-  // rebuilt from the source files on import, so stale classifications can't survive.
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore})); }catch(e){}
+  // Persist ONLY structural scores and your four daily limits. Run samples are
+  // NEVER cached — they are always rebuilt from the source files on import, so
+  // stale classifications can't survive.
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore, zoneLimits})); }catch(e){}
 }
 function restoreState(){
   try{
     let s=JSON.parse(localStorage.getItem(LS_KEY)||'null');
     if(!s){ const old=JSON.parse(localStorage.getItem('runledger_state_v1')||'null'); if(old&&old.saveStore) s={saveStore:old.saveStore}; } // carry scores forward, drop old samples
-    if(s) Object.assign(saveStore, s.saveStore||{});
+    if(s){
+      Object.assign(saveStore, s.saveStore||{});
+      if(s.zoneLimits) for(const g of Object.keys(ZONE_LIMIT_DEFAULTS)){
+        if(isFinite(s.zoneLimits[g])) zoneLimits[g]=s.zoneLimits[g];
+      }
+    }
     try{ localStorage.removeItem('runledger_state_v1'); }catch(e){}   // purge old cached samples for good
   }catch(e){}
 }
