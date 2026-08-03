@@ -236,6 +236,7 @@
     <div>
       <h1>Josh Run Ledger <span class="badge">web</span></h1>
       <div class="sub">Displayed Exposure = Relative Forces</div>
+      <div class="sub" id="buildStamp" style="font-family:ui-monospace,Menlo,monospace;font-size:12px;opacity:.8"></div>
     </div>
     <div class="datebox">
       <div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">Window end</div>
@@ -494,32 +495,62 @@ const RuleBasedGovernor = {
 
   recommend(inputs){
     const factors = [];
-    let budget;
 
-    // 1. Baseline = your set daily structure limit (readiness adjusts it below)
-    const DAILY_LIMIT = 200;    // exposure allowance (was 2000; ÷10 rescale 2026-07-21)
-    budget = DAILY_LIMIT;
-    factors.push(`Daily structure limit <b>${fmt1(DAILY_LIMIT)}</b>` + (inputs.chronicAvg > 0 ? ` — your 4-week avg is ${fmt1(inputs.chronicAvg)}/day` : ``));
+    // 1. Baseline caps — one per exposure class. These are separate reservoirs:
+    //    different tissues, different limiters. Seeded from an observed day.
+    const CAPS = { STRUCTURE:160, CRUISE:30, RUN:40, SPEED:15 };
+    let mult = 1;
+    factors.push(`Base caps — Structure <b>160</b> · Cruise <b>30</b> · Run <b>40</b> · Speed <b>15</b>`
+      + (inputs.chronicAvg > 0 ? ` — 4-week avg ${fmt1(inputs.chronicAvg)}/day` : ``));
 
     // 2. Acute:chronic guard — recent week running hot vs the month
     if(inputs.chronicAvg > 0 && inputs.acuteAvg > inputs.chronicAvg * 1.3){
-      budget *= 0.85;
+      mult *= 0.85;
       factors.push(`7-day load is hot: ${fmt1(inputs.acuteAvg)}/day vs ${fmt1(inputs.chronicAvg)} chronic → ×0.85`);
     }
 
-    // 3. Body readiness — leg + back scores
-    budget *= this._scoreMult(inputs.structScore, 'Structural', factors);
+    // 3. Body readiness — structural score
+    mult *= this._scoreMult(inputs.structScore, 'Structural', factors);
 
     // 4. Notes scan — flag words pull the budget down
     const flagWords = ['pain','sore','hurt','tight','niggle','tired','ache','strain','pull'];
     const hit = inputs.notes ? flagWords.find(w => inputs.notes.toLowerCase().includes(w)) : null;
     if(hit){
-      budget *= 0.85;
+      mult *= 0.85;
       factors.push(`Today's notes mention “${hit}” → ×0.85`);
     }
 
-    budget = Math.max(DAILY_LIMIT*0.2, Math.round(budget)); // floor at 20% of the limit
-    return { budget, factors };
+    // Higher-intensity classes are cut harder when readiness is down. Structure is
+    // the most robust tissue and the last thing to withdraw; speed the first.
+    const SENS = { STRUCTURE:0.5, CRUISE:1.0, RUN:1.3, SPEED:1.8 };
+    const classes = ['STRUCTURE','CRUISE','RUN','SPEED'].map(name => {
+      const base = CAPS[name];
+      // sensitivity scales the *shortfall* from 1.0, so mult=1 leaves every cap untouched
+      const m = Math.max(0, 1 - (1 - mult) * SENS[name]);
+      const cap = Math.max(Math.round(base*0.2), Math.round(base * m));   // floor at 20%
+      const used = inputs.usedByClass ? (inputs.usedByClass[name]||0) : 0;
+      const remaining = Math.max(0, cap - used);
+      const pctLeft = cap > 0 ? remaining/cap*100 : 0;
+      // Low readiness LOCKS the intensity classes outright. An untouched Speed
+      // budget is not permission to sprint on a wrecked structure.
+      const sc = inputs.structScore;
+      const locked = sc != null && ((name==='SPEED' && sc < 6) || (name==='RUN' && sc < 4)
+                                 || (name==='CRUISE' && sc < 3));
+      let state, icon;
+      if(locked)           { state='locked';     icon='🔒'; }
+      else if(used >= cap) { state='exhausted';  icon='❌'; }
+      else if(pctLeft<=25) { state='nearly';     icon='⚠️'; }
+      else                 { state='available';  icon='✅'; }
+      return {name, cap, used, remaining, pctLeft, state, icon, locked, mult:m};
+    });
+
+    if(mult < 1) factors.push(`Cut applied by class — Speed hit hardest, Structure least`);
+
+    const budget    = classes.reduce((a,c)=>a+c.cap, 0);
+    const admissible = classes.filter(c=>c.state!=='exhausted' && c.state!=='locked').map(c=>c.name);
+    const lockedNames = classes.filter(c=>c.locked).map(c=>c.name);
+    if(lockedNames.length) factors.push(`Structural <b>${inputs.structScore}/10</b> locks ${lockedNames.join(', ')} outright`);
+    return { budget, factors, classes, admissible };
   },
 
   _scoreMult(score, label, factors){
@@ -560,7 +591,14 @@ function dailyExposureHistory(){
 }
 
 function buildGovernorInputs(end){
-  const usedToday = aggregate(end, end).totals.exposure;
+  const todayTotals = aggregate(end, end).totals;
+  const usedToday = todayTotals.exposure;
+  const usedByClass = {
+    STRUCTURE: todayTotals.walkExp,
+    CRUISE:    todayTotals.cruiseExp,
+    RUN:       todayTotals.runExp,
+    SPEED:     todayTotals.speedExp
+  };
   // trailing windows EXCLUDE today, so the budget doesn't move as you use it
   const wS = shiftDate(end,-7),  wE = shiftDate(end,-1);
   const cS = shiftDate(end,-28), cE = shiftDate(end,-1);
@@ -569,6 +607,7 @@ function buildGovernorInputs(end){
   return {
     date: end,
     usedToday,
+    usedByClass,
     acuteAvg:   wDays ? aggregate(wS,wE).totals.exposure/wDays : 0,
     chronicAvg: cDays ? aggregate(cS,cE).totals.exposure/cDays : 0,
     activeDays7: wDays, activeDays28: cDays,
@@ -583,31 +622,66 @@ function renderGovernor(end){
   const rec = GovernorEngine.recommend(inputs);
   const used = inputs.usedToday;
   const remaining = Math.max(0, rec.budget - used);
-  // Bar shows what's LEFT in the tank — full at the start of the day, drains as you spend
-  const pctLeft = rec.budget > 0 ? Math.max(0, Math.min(100, remaining/rec.budget*100)) : 0;
+  const cls4 = rec.classes;
 
+  // Headline status comes from the WORST class, not the pooled average —
+  // the limiting reservoir is what actually governs the day.
+  const worst = cls4.reduce((a,c)=> c.pctLeft < a.pctLeft ? c : a, cls4[0]);
   let status, cls;
-  if(used >= rec.budget){ status='Limit Reached'; cls='limit'; }
-  else if(pctLeft <= 30){ status='Caution'; cls='caution'; }
-  else if(pctLeft <= 65){ status='Good'; cls='good'; }
-  else { status='Fresh'; cls='fresh'; }
+  const blocked = c => c.state==='exhausted' || c.state==='locked';
+  if(cls4.every(blocked))                  { status='Nothing Available'; cls='limit'; }
+  else if(cls4.some(c=>c.state==='locked')){ status=cap1(cls4.find(c=>c.state==='locked').name)+' Locked'; cls='limit'; }
+  else if(worst.state==='exhausted')       { status=cap1(worst.name)+' Exhausted'; cls='limit'; }
+  else if(worst.state==='nearly')          { status=cap1(worst.name)+' Nearly Spent'; cls='caution'; }
+  else if(worst.pctLeft <= 65)             { status='Good'; cls='good'; }
+  else                                     { status='Fresh'; cls='fresh'; }
 
-  const why = rec.factors.map(f=>`<span class="gwline">· ${f}</span>`).join('');
+  const COLOR = {STRUCTURE:'var(--green)', CRUISE:'var(--teal)', RUN:'var(--orange)', SPEED:'var(--red)'};
+  const rows = cls4.map(c => `
+    <div style="display:grid;grid-template-columns:1.15fr 1fr 1.5fr;gap:10px;align-items:center;
+                padding:9px 0;border-bottom:1px solid var(--line)">
+      <div style="font-weight:900;font-size:14px;color:${COLOR[c.name]};letter-spacing:.3px">
+        ${c.icon} ${c.name}</div>
+      <div style="font-size:13px;color:var(--muted);font-weight:700">
+        ${fmt1(c.used)} <span style="opacity:.6">/ ${fmt1(c.cap)}</span></div>
+      <div>
+        <div style="height:7px;border-radius:4px;background:rgba(255,255,255,.10);overflow:hidden">
+          <div style="height:100%;width:${Math.max(0,Math.min(100,c.pctLeft))}%;background:${COLOR[c.name]}"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;font-weight:700">
+          ${c.state==='locked' ? 'locked by readiness' : c.state==='exhausted' ? 'exhausted' : fmt1(c.remaining)+' left'}</div>
+      </div>
+    </div>`).join('');
+
+  const open = cls4.filter(c=>c.state==='available').map(c=>c.name);
+  const low  = cls4.filter(c=>c.state==='nearly').map(c=>c.name);
+  const shut = cls4.filter(c=>c.state==='exhausted').map(c=>c.name);
+  const lock = cls4.filter(c=>c.state==='locked').map(c=>c.name);
+  const verdict = [
+    open.length ? `<b style="color:var(--green)">Still admissible:</b> ${open.map(cap1).join(', ')}` : '',
+    low.length  ? `<b style="color:var(--orange)">Nearly spent:</b> ${low.map(cap1).join(', ')}` : '',
+    shut.length ? `<b style="color:var(--red)">Spent:</b> ${shut.map(cap1).join(', ')}` : '',
+    lock.length ? `<b style="color:var(--red)">Locked:</b> ${lock.map(cap1).join(', ')}` : ''
+  ].filter(Boolean).join(' &nbsp;&middot;&nbsp; ')
+    || `<b style="color:var(--red)">Nothing admissible today.</b>`;
+
+  const why = rec.factors.map(f=>`<span class="gwline">&middot; ${f}</span>`).join('');
 
   document.getElementById('governor').innerHTML = `
     <div class="gov">
       <div class="govtop">
-        <div class="govtitle">⚖️ Adaptation Governor — Today's Exposure Budget</div>
+        <div class="govtitle">&#9878;&#65039; Adaptation Governor &mdash; Today's Exposure Budgets</div>
         <div class="govchip ${cls}">${status}</div>
       </div>
-      <div class="govbig">${fmt1(remaining)} <small>/ ${fmt1(rec.budget)} remaining</small></div>
-      <div class="govsub"><b>${fmt1(used)}</b> exposure units used today</div>
-      <div class="govtrack"><div class="govfill ${cls}" style="width:${pctLeft}%"></div></div>
+      <div style="font-size:15px;line-height:1.6;margin:4px 0 12px">${verdict}</div>
+      <div style="margin-bottom:10px">${rows}</div>
+      <div class="govsub"><b>${fmt1(used)}</b> of ${fmt1(rec.budget)} total units used today &middot; ${fmt1(remaining)} left across all classes</div>
       <div class="govwhy">${why}</div>
       <div class="govengine">Engine: ${GovernorEngine.name}</div>
     </div>`;
-  return { budget: rec.budget, used, remaining };
+  return { budget: rec.budget, used, remaining, classes: cls4 };
 }
+function cap1(s){ return s.charAt(0)+s.slice(1).toLowerCase(); }
 function fmtDate(str){
   const [y,m,d]=str.split('-').map(Number);
   const mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m-1];
@@ -1126,6 +1200,17 @@ function expandSamples(obj){
   return out;
 }
 
+const BUILD = "2026-08-03-e";
+function updateBuildStamp(){
+  const el=document.getElementById('buildStamp'); if(!el) return;
+  let bytes=0, days=0;
+  try{ const raw=localStorage.getItem(LS_KEY)||''; bytes=raw.length;
+       const p=JSON.parse(raw||'null'); days=p&&p.samples?Object.keys(p.samples).length:0; }catch(e){}
+  const state = storageOK===false ? 'STORAGE FAILING' : (storageOK===true ? 'storage ok' : 'storage untested');
+  el.textContent = `build ${BUILD} · ${allSamples.length} samples in memory · ${days} day(s) of run data stored · ${bytes} bytes · ${state}`;
+  el.style.color = storageOK===false ? '#ff383d' : '';
+}
+
 let storageOK = null, storageErr = '';
 function persist(){
   const payload = JSON.stringify({saveStore, healthSteps, samples:compactSamples()});
@@ -1140,7 +1225,7 @@ function persist(){
       ? 'storage full (QuotaExceededError)'
       : ('storage threw: ' + (e && (e.name||e.message) || 'unknown'));
   }
-  showStorageBanner();
+  showStorageBanner(); updateBuildStamp();
   return storageOK;
 }
 function showStorageBanner(){
@@ -1333,7 +1418,7 @@ restoreState();
     storageOK=false;
     storageErr='opened as a local file (file://) — iOS gives these no persistent storage';
   }
-  showStorageBanner();
+  showStorageBanner(); updateBuildStamp();
 })();
 document.getElementById('dateEnd').value = new Date().toISOString().slice(0,10);
 loadDay();
