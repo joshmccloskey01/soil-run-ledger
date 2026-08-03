@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>Josh Run Ledger</title>
 <!-- Optional: enables dropping the Apple Health Auto Export .zip directly. If offline/unavailable, the raw .csv path still works. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -148,6 +150,9 @@
   .govwhy .gwline{display:block;padding-left:14px;text-indent:-14px}
   .govengine{margin-top:10px;font-size:10px;color:rgba(182,189,199,.6);text-transform:uppercase;font-weight:700;letter-spacing:1px}
   .govnote{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .govchip.closed{background:rgba(182,189,199,.15);color:var(--muted)}
+  .govfill.closed{background:rgba(182,189,199,.3)}
+  .zgov.closed-acct{opacity:.6}
 
   /* Four separate accounts — one card each, deliberately not summed */
   .zgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
@@ -266,8 +271,9 @@
 
   <div class="head">
     <div>
-      <h1>Josh Run Ledger <span class="badge">web</span></h1>
+      <h1>Josh Run Ledger <span class="badge">v4</span></h1>
       <div class="sub">Four step accounts &middot; no conversion between them</div>
+      <div class="sub" style="opacity:.55;font-size:11px">build 4 &middot; cruise 300 / run 200 / speed closed</div>
     </div>
     <div class="datebox">
       <div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">Window end</div>
@@ -391,7 +397,8 @@ const AMBIENT_CADENCE_SPM = 100;
 // step does not buy a sprint step, because walking volume does not produce the
 // tissue tolerance sprinting demands. Overspending Structure costs little;
 // overspending Speed hurts. One pooled number cannot score both.
-const ZONE_LIMIT_DEFAULTS = { STRUCTURE:12000, CRUISE:3000, RUN:1500, SPEED:300 };
+const ZONE_LIMIT_DEFAULTS = { STRUCTURE:12000, CRUISE:300, RUN:200, SPEED:0 };
+const LIMITS_VERSION = 2;   // bump to push new defaults past previously saved limits
 let zoneLimits = {...ZONE_LIMIT_DEFAULTS};
 
 // Readiness cuts apply to the running zones. Structure is restorative — it is
@@ -592,6 +599,10 @@ const RuleBasedGovernor = {
     const acute = inputs.acuteAvg[gname] || 0;
     const chronic = inputs.chronicAvg[gname] || 0;
 
+    if(LIMIT === 0){
+      factors.push(`Limit set to <b>0</b> — this account is closed. Nothing to spend here yet.`);
+      return { budget: 0, factors };
+    }
     factors.push(`Daily ${gname.toLowerCase()} limit <b>${fmtInt(LIMIT)}</b> steps`
       + (chronic > 0 ? ` — 4-week avg ${fmtInt(chronic)}/day` : ``));
 
@@ -694,7 +705,8 @@ function renderGovernor(end){
     const pctLeft = budget > 0 ? Math.max(0, Math.min(100, remaining/budget*100)) : 0;
 
     let status, cls;
-    if(used >= budget){ status='Spent'; cls='limit'; }
+    if(zoneLimits[gname] === 0){ status='Closed'; cls='closed'; }
+    else if(used >= budget){ status='Spent'; cls='limit'; }
     else if(pctLeft <= 30){ status='Caution'; cls='caution'; }
     else if(pctLeft <= 65){ status='Good'; cls='good'; }
     else { status='Open'; cls='fresh'; }
@@ -708,7 +720,7 @@ function renderGovernor(end){
           <div class="zgname"><span class="zgicon">${g.icon}</span>${gname}</div>
           <div class="govchip ${cls}">${status}</div>
         </div>
-        <div class="zgbig">${fmtInt(remaining)} <small>/ ${fmtInt(budget)} steps left</small></div>
+        <div class="zgbig">${zoneLimits[gname]===0 ? '—' : fmtInt(remaining)} <small>${zoneLimits[gname]===0 ? 'account closed' : '/ '+fmtInt(budget)+' steps left'}</small></div>
         <div class="zgsub"><b>${fmtInt(used)}</b> spent today</div>
         <div class="govtrack"><div class="govfill ${cls}" style="width:${pctLeft}%"></div></div>
         <div class="govwhy">${why}</div>
@@ -865,7 +877,7 @@ function renderCategories(agg, targetId, label, govInfo){
         <span class="catname">${gname}<span class="catdesc">${g.desc}</span></span>
         <span class="catstats">
           <span class="cstat"><b>${fmtInt(gSteps)}</b>steps</span>
-          ${gi?`<span class="cstat"><b>${fmtInt(gi.remaining)}</b>left</span>`:`<span class="cstat"><b>${gMins>0?fmtDur(gMins):'—'}</b>time</span>`}
+          ${gi&&zoneLimits[gname]>0?`<span class="cstat"><b>${fmtInt(gi.remaining)}</b>left</span>`:`<span class="cstat"><b>${gMins>0?fmtDur(gMins):'—'}</b>time</span>`}
         </span>
         <span class="chev">${open?'▾':'▸'}</span>
       </button>
@@ -888,8 +900,8 @@ function renderCategories(agg, targetId, label, govInfo){
           const gi = govInfo ? govInfo[gname] : null;
           const c = colorOf[gname];
           return `<div class="titem"><div class="tcircle ${c}">${GROUPS[gname].icon}</div><div>
-            <div class="tlabel">${gname}${gi?' left':''}</div>
-            <div class="tval ${c}">${fmtInt(gi ? gi.remaining : totals.zoneSteps[gname])}</div></div></div>`;
+            <div class="tlabel">${gname}${gi&&zoneLimits[gname]>0?' left':''}</div>
+            <div class="tval ${c}">${gi ? (zoneLimits[gname]===0 ? '—' : fmtInt(gi.remaining)) : fmtInt(totals.zoneSteps[gname])}</div></div></div>`;
         }).join('')}
       </div>
     </div>`;
@@ -1232,7 +1244,7 @@ function persist(){
   // Persist ONLY structural scores and your four daily limits. Run samples are
   // NEVER cached — they are always rebuilt from the source files on import, so
   // stale classifications can't survive.
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore, zoneLimits})); }catch(e){}
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore, zoneLimits, limitsVersion:LIMITS_VERSION})); }catch(e){}
 }
 function restoreState(){
   try{
@@ -1240,8 +1252,12 @@ function restoreState(){
     if(!s){ const old=JSON.parse(localStorage.getItem('runledger_state_v1')||'null'); if(old&&old.saveStore) s={saveStore:old.saveStore}; } // carry scores forward, drop old samples
     if(s){
       Object.assign(saveStore, s.saveStore||{});
-      if(s.zoneLimits) for(const g of Object.keys(ZONE_LIMIT_DEFAULTS)){
-        if(isFinite(s.zoneLimits[g])) zoneLimits[g]=s.zoneLimits[g];
+      // Only honour saved limits from the current version; older saves get the
+      // new defaults instead of silently pinning the old numbers.
+      if(s.zoneLimits && s.limitsVersion === LIMITS_VERSION){
+        for(const g of Object.keys(ZONE_LIMIT_DEFAULTS)){
+          if(isFinite(s.zoneLimits[g])) zoneLimits[g]=s.zoneLimits[g];
+        }
       }
     }
     try{ localStorage.removeItem('runledger_state_v1'); }catch(e){}   // purge old cached samples for good
