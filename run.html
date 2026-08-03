@@ -271,9 +271,9 @@
 
   <div class="head">
     <div>
-      <h1>Josh Run Ledger <span class="badge">v4</span></h1>
+      <h1>Josh Run Ledger <span class="badge">v5</span></h1>
       <div class="sub">Four step accounts &middot; no conversion between them</div>
-      <div class="sub" style="opacity:.55;font-size:11px">build 4 &middot; cruise 300 / run 200 / speed closed</div>
+      <div class="sub" style="opacity:.55;font-size:11px">build 5 &middot; daily steps now save</div>
     </div>
     <div class="datebox">
       <div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600">Window end</div>
@@ -1241,10 +1241,10 @@ const saveStore={};                           // date -> { score:0-10, reset:boo
 let ssTouched=false;
 
 function persist(){
-  // Persist ONLY structural scores and your four daily limits. Run samples are
-  // NEVER cached — they are always rebuilt from the source files on import, so
-  // stale classifications can't survive.
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore, zoneLimits, limitsVersion:LIMITS_VERSION})); }catch(e){}
+  // Persist structural scores, your four daily limits, and the daily step counts
+  // you type in. Run samples are NEVER cached — they are always rebuilt from the
+  // source files on import, so stale classifications can't survive.
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore, zoneLimits, limitsVersion:LIMITS_VERSION, healthSteps})); }catch(e){}
 }
 function restoreState(){
   try{
@@ -1252,6 +1252,7 @@ function restoreState(){
     if(!s){ const old=JSON.parse(localStorage.getItem('runledger_state_v1')||'null'); if(old&&old.saveStore) s={saveStore:old.saveStore}; } // carry scores forward, drop old samples
     if(s){
       Object.assign(saveStore, s.saveStore||{});
+      Object.assign(healthSteps, s.healthSteps||{});
       // Only honour saved limits from the current version; older saves get the
       // new defaults instead of silently pinning the old numbers.
       if(s.zoneLimits && s.limitsVersion === LIMITS_VERSION){
