@@ -1101,10 +1101,38 @@ const LS_KEY='runledger_scores_v2';          // v2: run samples no longer cached
 const saveStore={};                           // date -> { score:0-10, reset:bool, notes:string }
 let ssTouched=false;
 
+let storageOK = null, storageErr = '';
 function persist(){
   // Persist ONLY structural scores. Run samples are NEVER cached — they are always
   // rebuilt from the source files on import, so stale classifications can't survive.
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({saveStore, healthSteps})); }catch(e){}
+  const payload = JSON.stringify({saveStore, healthSteps});
+  try{
+    localStorage.setItem(LS_KEY, payload);
+    const back = localStorage.getItem(LS_KEY);      // read back — a write that vanishes is not a write
+    if(back !== payload){ storageOK=false; storageErr='write did not stick (read-back mismatch)'; }
+    else { storageOK=true; storageErr=''; }
+  }catch(e){
+    storageOK=false;
+    storageErr = (e && e.name==='QuotaExceededError')
+      ? 'storage full or blocked (QuotaExceededError — Private Browsing does this)'
+      : ('storage threw: ' + (e && (e.name||e.message) || 'unknown'));
+  }
+  showStorageBanner();
+  return storageOK;
+}
+function showStorageBanner(){
+  let el = document.getElementById('storageBanner');
+  if(storageOK !== false){ if(el) el.remove(); return; }
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'storageBanner';
+    el.style.cssText = 'border:1px solid #ff383d;background:rgba(255,56,61,.12);color:#ff9a9d;'
+      + 'padding:12px 15px;border-radius:10px;margin-bottom:14px;font-size:14px;line-height:1.5;font-weight:600';
+    const w = document.querySelector('.wrap');
+    w.insertBefore(el, w.firstChild);
+  }
+  el.textContent = 'NOT SAVING — ' + storageErr
+    + '. Nothing you enter will survive a reload. Common causes: opened from a downloaded file instead of the live URL, or a Private tab.';
 }
 function restoreState(){
   try{
@@ -1245,9 +1273,12 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
   const d=document.getElementById('dateEnd').value;
   const cur=saveStore[d]||{};
   saveStore[d]={ score:+document.getElementById('ssRange').value, reset:!!cur.reset, notes:document.getElementById('notes').value };
-  persist();
+  const ok = persist();
   const msg=document.getElementById('savedMsg');
-  msg.textContent=`Saved ${d}: ${saveStore[d].score}/10 ✓`;
+  msg.textContent = ok
+    ? `Saved ${d}: ${saveStore[d].score}/10 ✓`
+    : `NOT SAVED — ${storageErr}`;
+  msg.style.color = ok ? '' : '#ff383d';
   setTimeout(()=>msg.textContent='',3000);
   renderDash(); render();
 });
@@ -1259,6 +1290,24 @@ document.getElementById('notes').addEventListener('input',()=>{
 
 // restore saved history, jump to today, and render
 restoreState();
+/* boot self-test: prove storage actually works before the user trusts it with data */
+(function(){
+  try{
+    const probe='__ledger_probe__';
+    localStorage.setItem(probe,'1');
+    if(localStorage.getItem(probe)!=='1'){ storageOK=false; storageErr='write did not stick (read-back mismatch)'; }
+    else { storageOK=true; storageErr=''; }
+    localStorage.removeItem(probe);
+  }catch(e){
+    storageOK=false;
+    storageErr='localStorage unavailable: ' + (e && (e.name||e.message) || 'unknown');
+  }
+  if(location.protocol==='file:'){
+    storageOK=false;
+    storageErr='opened as a local file (file://) — iOS gives these no persistent storage';
+  }
+  showStorageBanner();
+})();
 document.getElementById('dateEnd').value = new Date().toISOString().slice(0,10);
 loadDay();
 
