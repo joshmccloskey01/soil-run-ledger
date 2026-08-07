@@ -140,6 +140,38 @@
   textarea{width:100%; height:130px; background:var(--surface); color:var(--bone);
     border:1px solid var(--rule); border-radius:3px; font-family:var(--mono);
     font-size:11px; padding:10px;}
+  /* ── envelope: preregistered cost bounds ── */
+  .env{margin:0 18px 14px; border:1px solid var(--rule); border-radius:3px;
+    background:var(--surface); padding:15px 14px 13px;}
+  .env.due{border-color:var(--stamp);}
+  .env .claim{font-family:var(--mono); font-size:10px; letter-spacing:.09em;
+    color:var(--dim); line-height:1.8; margin-top:7px;}
+  .env .claim b{color:var(--graphite); font-weight:400;}
+  .env .state{font-family:var(--mono); font-size:11px; letter-spacing:.1em;
+    color:var(--graphite); margin-top:11px;}
+  .env .state.breach{color:var(--stamp);}
+  .scale{display:flex; flex-wrap:wrap; gap:5px; margin:9px 0 4px;}
+  .scale button{flex:1 1 0; min-width:34px; background:var(--raise);
+    border:1px solid var(--rule); border-radius:2px; color:var(--graphite);
+    font-family:var(--mono); font-size:15px; padding:12px 0;}
+  .scale button.out{color:var(--stamp); border-color:#3d2229;}
+  .scale button.on{background:var(--bone); border-color:var(--bone); color:var(--ink);}
+  .scale button.on.out{background:var(--stamp); border-color:var(--stamp); color:#fff;}
+
+  /* ── per-region joint panel ── */
+  .reg{display:flex; align-items:center; gap:8px; padding:9px 0;
+    border-top:1px solid var(--ruleSoft);}
+  .reg:first-child{border-top:none;}
+  .reg .rn{flex:1; font-size:14px; color:var(--bone);}
+  .reg button{background:var(--raise); border:1px solid var(--rule);
+    border-radius:2px; color:var(--dim); font-family:var(--mono); font-size:12px;
+    letter-spacing:.06em; padding:9px 0; min-width:52px;}
+  .reg button.set{color:var(--bone); border-color:var(--graphite);}
+  .reg button.bad{color:#fff; background:var(--stamp); border-color:var(--stamp);}
+  .reg button.open{background:var(--bone); border-color:var(--bone); color:var(--ink);}
+  .clear{width:100%; background:var(--raise); border:1px solid var(--rule);
+    border-radius:2px; color:var(--bone); font-family:var(--mono); font-size:12px;
+    letter-spacing:.2em; padding:15px 0; margin-top:11px;}
   .fresh-in{animation:si 260ms cubic-bezier(.2,.7,.3,1);}
   @keyframes si{from{opacity:0;transform:translateY(-7px)} to{opacity:1;transform:none}}
   @media (prefers-reduced-motion: reduce){.fresh-in{animation:none}}
@@ -182,11 +214,12 @@ const IDS = Object.keys(EX);
 
 /* ══ store ═══════════════════════════════════════════════ */
 const KEY = "ledger.v1";
-let DB = {v:1, entries:[], prefs:{}};
+let DB = {v:1, entries:[], marks:[], prefs:{}};
 let saveErr = null;
 function load(){
   try{ const raw = localStorage.getItem(KEY);
-    if(raw) DB = Object.assign({v:1,entries:[],prefs:{}}, JSON.parse(raw));
+    if(raw) DB = Object.assign({v:1,entries:[],marks:[],prefs:{}}, JSON.parse(raw));
+    if(!Array.isArray(DB.marks)) DB.marks = [];
   }catch(e){ saveErr = "Could not read stored ledger."; }
 }
 function save(){
@@ -219,6 +252,87 @@ function dayLabel(key){
     .toLocaleDateString(undefined,{weekday:"short",day:"2-digit",month:"short"}).toUpperCase();
 }
 const comma = n => n.toLocaleString("en-US");
+
+/* ══ envelope ════════════════════════════════════════════
+   Two precommitments, standing until amended, written before the
+   exposures they govern and scored by what actually gets recorded.
+
+     each exposure    J in [0,2]   per region
+     every 21 days    F = 10       on a fixed cadence
+
+   Both scales run past the bound on purpose. A J that cannot reach 3,
+   or an F that cannot fall below 10, is a claim that cannot fail.
+
+   J is per region because a single aggregate discards the localization
+   that makes the number worth having: one knee at 4 and everything else
+   at 0 is not the same finding as everything at 1.
+
+   The freshness cadence is anchored, not rolling. Cycle k opens at
+   anchor + 21k days regardless of when cycle k-1 was answered, so a
+   late score fills its own cycle and does not push the next one back.
+   ═══════════════════════════════════════════════════════ */
+const DAY_MS = 86400000;
+const ENV = {j:{max:2, top:5}, f:{target:10, days:21}};
+const REGIONS = [
+  {id:"foot",     n:"Foot",     bi:1},
+  {id:"ankle",    n:"Ankle",    bi:1},
+  {id:"knee",     n:"Knee",     bi:1},
+  {id:"hip",      n:"Hip",      bi:1},
+  {id:"back",     n:"Back",     bi:0},
+  {id:"shoulder", n:"Shoulder", bi:1}
+];
+/* every scorable slot, in order */
+function slots(){
+  const out = [];
+  REGIONS.forEach(r => r.bi ? out.push({r:r.id,s:"L"},{r:r.id,s:"R"})
+                            : out.push({r:r.id,s:null}));
+  return out;
+}
+const slotKey = (r,s) => r + (s ? ":"+s : "");
+
+function addMark(m){
+  m.id = Date.now()+"-"+Math.random().toString(36).slice(2,7);
+  m.ts = Date.now();
+  DB.marks.push(m); save(); return m;
+}
+const marksOf = k => DB.marks.filter(m => m.kind===k).sort((a,b)=>b.ts-a.ts);
+
+/* latest joint mark per slot for a given day */
+function jointOn(dayK){
+  const out = {};
+  marksOf("joint").forEach(m => {
+    if(dayKey(m.ts)!==dayK) return;
+    const k = slotKey(m.region, m.side);
+    if(!(k in out)) out[k] = m;          // marksOf is newest-first
+  });
+  return out;
+}
+function jointState(dayK){
+  const got = jointOn(dayK), all = slots();
+  const vals = all.map(x => got[slotKey(x.r,x.s)]).filter(Boolean);
+  const worst = vals.reduce((t,m) => Math.max(t, m.value), -1);
+  return {got: got, scored: vals.length, total: all.length,
+          worst: worst, breach: worst > ENV.j.max};
+}
+
+/* ── freshness: fixed cadence from a declared anchor ── */
+function anchorTs(){
+  const a = marksOf("anchor")[0];
+  return a ? a.ts : null;
+}
+function cycleNow(){
+  const a = anchorTs();
+  if(a === null) return null;
+  return Math.floor((Date.now()-a)/(ENV.f.days*DAY_MS));
+}
+function cycleStart(k){ return anchorTs() + k*ENV.f.days*DAY_MS; }
+function freshFor(k){ return marksOf("fresh").find(m => m.cycle===k) || null; }
+function missedCycles(){
+  const c = cycleNow(); if(c === null) return [];
+  const out = [];
+  for(let k=0; k<c; k++) if(!freshFor(k)) out.push(k);
+  return out;
+}
 
 /* ══ derive ══════════════════════════════════════════════ */
 const byTime = (a,b) => b.ts - a.ts;
@@ -254,8 +368,8 @@ function groupDay(k){
 }
 
 /* ══ state ═══════════════════════════════════════════════ */
-let S = {screen:"home", session:null, ex:null, day:null, fresh:null,
-         w:0, reps:5, hold:10, variation:null, kind:"work"};
+let S = {screen:"home", session:null, ex:null, day:null, fresh:null, jopen:null,
+         w:0, reps:5, hold:10, variation:null, kind:"work", tempo:0};
 const app = document.getElementById("app");
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -267,6 +381,7 @@ function rowHTML(e, rest, opts){
   const bits = [];
   if(opts.showEx) bits.push(m.n);
   if(e.variation) bits.push(e.variation);
+  if(e.tempo) bits.push(e.tempo+"s/rep");
   if(ramp) bits.push("ramp");
   return '<div class="row'+(opts.fresh?" fresh-in":"")+(ramp?" rampset":"")+'">'
     + '<span class="t'+(opts.fresh?" fresh":"")+'">'+clock(e.ts)+'</span>'
@@ -281,6 +396,89 @@ function listHTML(entries, opts){
   return entries.map((e,i) =>
     rowHTML(e, entries[i+1] ? e.ts-entries[i+1].ts : null,
       Object.assign({}, opts, {fresh: S.fresh===e.id, void: opts.void && i===0}))).join("");
+}
+
+function scaleHTML(attr, cur, top, bound){
+  let h = "";
+  for(let v=0; v<=top; v++){
+    const out = bound(v);
+    h += '<button class="'+(out?"out":"")+(cur===v?" on":"")+'" data-'+attr+'="'+v+'">'+v+'</button>';
+  }
+  return '<div class="scale">'+h+'</div>';
+}
+
+function jointHTML(){
+  const today = dayKey(Date.now());
+  const st = jointState(today);
+  const worked = dayOf(today).filter(e => kindOf(e)==="work").length;
+
+  const rows = REGIONS.map(r => {
+    const sides = r.bi ? [["L","L"],["R","R"]] : [[null,"—"]];
+    return '<div class="reg"><span class="rn">'+r.n+'</span>'
+      + sides.map(sd => {
+          const k = slotKey(r.id, sd[0]);
+          const m = st.got[k];
+          const open = S.jopen === k;
+          const cls = open ? "open" : (m ? (m.value>ENV.j.max ? "bad" : "set") : "");
+          return '<button class="'+cls+'" data-jslot="'+k+'">'
+               + sd[1] + (m ? " " + m.value : "") + '</button>';
+        }).join("")
+      + '</div>'
+      + (sides.some(sd => S.jopen === slotKey(r.id, sd[0]))
+          ? scaleHTML("jval", (st.got[S.jopen]||{}).value, ENV.j.top, v => v > ENV.j.max)
+          : "");
+  }).join("");
+
+  let state, cls = "";
+  if(st.scored === 0)          state = worked ? "NOT YET SCORED" : "NO EXPOSURE TODAY";
+  else if(st.breach)         { state = "OUTSIDE ENVELOPE &middot; WORST J="+st.worst; cls = " breach"; }
+  else if(st.scored < st.total) state = "PARTIAL &middot; "+st.scored+"/"+st.total+" &middot; WORST J="+st.worst;
+  else                          state = "WITHIN ENVELOPE &middot; WORST J="+st.worst;
+
+  return '<div class="env">'
+    + '<div class="eyebrow">Joint response</div>'
+    + '<div class="claim">PREREGISTERED &nbsp;<b>J &isin; [0,2]</b> per region, after every exposure</div>'
+    + '<div style="margin-top:10px">'+rows+'</div>'
+    + '<button class="clear" data-jclear="1">ALL CLEAR &middot; SCORE EVERY REGION 0</button>'
+    + '<div class="state'+cls+'" style="'+(st.scored?"":"color:var(--dim)")+'">'+state+'</div>'
+    + '</div>';
+}
+
+function freshHTML(){
+  const a = anchorTs();
+  if(a === null){
+    return '<div class="env">'
+      + '<div class="eyebrow">Freshness audit</div>'
+      + '<div class="claim">PREREGISTERED &nbsp;<b>F = 10</b> every '+ENV.f.days+' days</div>'
+      + '<div class="claim">The schedule needs an origin. Every later checkpoint counts '
+        + 'from it, so a late answer fills its own cycle instead of moving the next one.</div>'
+      + '<button class="clear" data-fanchor="1">START THE SCHEDULE TODAY</button></div>';
+  }
+  const c = cycleNow(), mark = freshFor(c), missed = missedCycles();
+  const opened = Math.floor((Date.now()-cycleStart(c))/DAY_MS);
+  const dueIn  = ENV.f.days - opened;
+  const tail = (missed.length
+      ? '<div class="claim" style="color:var(--stamp)">UNSCORED CYCLE'
+        + (missed.length>1?"S":"")+' &middot; '+missed.join(", ")+'</div>' : '');
+
+  if(mark){
+    const miss = mark.value < ENV.f.target;
+    return '<div class="env'+(miss?" due":"")+'">'
+      + '<div class="eyebrow"'+(miss?' style="color:var(--stamp)"':'')+'>Freshness audit &middot; cycle '+c+'</div>'
+      + '<div class="claim">PREREGISTERED &nbsp;<b>F = 10</b> every '+ENV.f.days+' days</div>'
+      + '<div class="state'+(miss?" breach":"")+'">'
+        + (miss ? "MISSED &middot; F="+mark.value : "MET &middot; F=10")
+        + '<span style="color:var(--dim)"> &middot; NEXT IN '+dueIn+'D</span></div>'
+      + tail + '</div>';
+  }
+  return '<div class="env due">'
+    + '<div class="eyebrow" style="color:var(--stamp)">Freshness audit &middot; cycle '+c
+      + (opened ? ' &middot; OPEN '+opened+'D' : ' &middot; OPEN')+'</div>'
+    + '<div class="claim">PREREGISTERED &nbsp;<b>F = 10</b> every '+ENV.f.days+' days</div>'
+    + '<div class="claim">Score present freshness. Anything under 10 is residual cost that '
+      + 'a run of individually acceptable sessions did not show.</div>'
+    + scaleHTML("fval", null, ENV.f.target, v => v < ENV.f.target)
+    + tail + '</div>';
 }
 
 /* ══ screens ═════════════════════════════════════════════ */
@@ -299,7 +497,9 @@ function home(){
     + '<div><div class="eyebrow" style="color:var(--bone);font-size:12px">Ledger</div>'
     + '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.16em;margin-top:4px">v0.3</div></div>'
     + '<div class="eyebrow">'+dayLabel(today)+'</div></div>'
-    + '<div style="padding:26px 18px 10px">'
+    + '<div style="padding:20px 0 4px"></div>'
+    + freshHTML() + jointHTML()
+    + '<div style="padding:14px 18px 10px">'
     + [["push","Push",c("push")],["pull","Pull",c("pull")],["legs","Legs",c("legs")]]
         .map(a => '<button class="slab" data-session="'+a[0]+'">'+a[1]+'<span>'+a[2]+'</span></button>').join("")
     + '</div>'
@@ -349,6 +549,8 @@ function renderEntry(){
       + (m.iso ? fieldHTML("Hold","hold",S.hold,[-5,-1,1,5],"SEC",0)
                : fieldHTML("Reps","reps",S.reps,[-5,-1,1,5],"REPS",0))
     + '</div>'
+    + (m.iso ? '' : '<div style="display:flex;gap:10px;margin-top:14px">'
+        + fieldHTML("Tempo","tempo",S.tempo,[-1,1],"SEC/REP",0) + '</div>')
     + '<div class="kind">'
       + '<button data-kind="ramp" class="'+(S.kind==="ramp"?"on":"")+'">RAMP</button>'
       + '<button data-kind="work" class="'+(S.kind==="work"?"on":"")+'">WORK</button></div>'
@@ -374,11 +576,19 @@ function entryLog(){
   if(!es.length) return '<div class="empty">No sets on this movement today.</div>';
   return listHTML(es, {showEx:0, void: Date.now()-es[0].ts < 120000});
 }
+/* 0 is the off position on any field that has one: bodyweight for load,
+   untracked for tempo. Dimmed, and the unit says which. */
+function offLabel(k){ return k==="w" ? "BODYWEIGHT" : (k==="tempo" ? "NOT TRACKED" : null); }
+function isOff(k,val){
+  if(val !== 0) return false;
+  if(k === "w") return !!(EX[S.ex] && EX[S.ex].bw);
+  return k === "tempo";
+}
 function fieldHTML(label,k,val,steps,unit,bw){
-  const isBW = bw && val===0;
+  const isBW = isOff(k,val);
   return '<div class="field"><div class="eyebrow" style="margin-bottom:10px">'+label+'</div>'
     + '<div class="box"><input type="number" inputmode="decimal" data-k="'+k+'" value="'+val+'" class="'+(isBW?"bw":"")+'">'
-    + '<div class="unit" data-unit="'+k+'">'+(isBW?"BODYWEIGHT":unit)+'</div>'
+    + '<div class="unit" data-unit="'+k+'">'+(isBW?offLabel(k):unit)+'</div>'
     + '<div class="steps">'+steps.map(s =>
         '<button data-step="'+k+'" data-by="'+s+'">'+(s>0?"+"+s:s)+'</button>').join("")
     + '</div></div></div>';
@@ -475,15 +685,18 @@ function openEx(id){
   S.hold = p.hold != null ? p.hold : 10;
   S.variation = m.vars ? (p.variation || m.vars[0]) : null;
   S.kind = p.kind === "ramp" ? "ramp" : "work";
+  S.tempo = p.tempo || 0;
   S.screen = "entry"; render();
 }
 function perform(){
   const m = EX[S.ex];
   const e = {id: Date.now()+"-"+Math.random().toString(36).slice(2,7), ts: Date.now(),
     session:S.session, ex:S.ex, w:S.w, kind:S.kind,
-    reps: m.iso ? null : S.reps, hold: m.iso ? S.hold : null, variation:S.variation};
+    reps: m.iso ? null : S.reps, hold: m.iso ? S.hold : null, variation:S.variation,
+    tempo: (m.iso || !S.tempo) ? null : S.tempo};
   DB.entries.push(e);
-  DB.prefs[S.ex] = {w:S.w, reps:S.reps, hold:S.hold, variation:S.variation, kind:S.kind};
+  DB.prefs[S.ex] = {w:S.w, reps:S.reps, hold:S.hold, variation:S.variation, kind:S.kind,
+    tempo:S.tempo};
   save();
   S.fresh = e.id;
   document.getElementById("exlog").innerHTML = entryLog();
@@ -498,10 +711,11 @@ function setVal(k,v){
   const inp = document.querySelector('input[data-k="'+k+'"]');
   if(!inp) return;
   inp.value = v;
-  const bw = k==="w" && EX[S.ex].bw && v===0;
-  inp.className = bw ? "bw" : "";
+  const off = isOff(k,v);
+  inp.className = off ? "bw" : "";
   const u = document.querySelector('[data-unit="'+k+'"]');
-  if(u) u.textContent = bw ? "BODYWEIGHT" : (k==="w"?"LB":(k==="hold"?"SEC":"REPS"));
+  if(u) u.textContent = off ? offLabel(k)
+    : (k==="w"?"LB":(k==="hold"?"SEC":(k==="tempo"?"SEC/REP":"REPS")));
 }
 function merge(text){
   let inc;
@@ -518,7 +732,7 @@ function msg(t){ const n = document.getElementById("msg"); if(n) n.textContent =
 
 /* ══ events ══════════════════════════════════════════════ */
 app.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-session],[data-ex],[data-go],[data-perform],[data-step],[data-var],[data-kind],[data-void],[data-day],[data-mday],[data-copy],[data-download],[data-import]");
+  const t = ev.target.closest("[data-session],[data-ex],[data-go],[data-perform],[data-step],[data-var],[data-kind],[data-void],[data-day],[data-mday],[data-copy],[data-download],[data-import],[data-jslot],[data-jval],[data-jclear],[data-fval],[data-fanchor]");
   if(!t) return;
   const d = t.dataset;
   if(d.session){ S.session = d.session; S.screen = "list"; render(); }
@@ -529,6 +743,19 @@ app.addEventListener("click", ev => {
   else if(d.step){ setVal(d.step, (S[d.step]||0) + Number(d.by)); }
   else if(d.var){ S.variation = d.var; renderEntry(); }
   else if(d.kind){ S.kind = d.kind; renderEntry(); }
+  else if(d.jslot){ S.jopen = (S.jopen===d.jslot ? null : d.jslot); render(); }
+  else if(d.jval != null){
+    const parts = S.jopen.split(":");
+    addMark({kind:"joint", region:parts[0], side:parts[1]||null, value:Number(d.jval)});
+    S.jopen = null; if(navigator.vibrate) navigator.vibrate(14); render(); }
+  else if(d.jclear){
+    const batch = Date.now()+"-c";
+    slots().forEach(x => addMark({kind:"joint", region:x.r, side:x.s, value:0, batch:batch}));
+    S.jopen = null; if(navigator.vibrate) navigator.vibrate(18); render(); }
+  else if(d.fanchor){ addMark({kind:"anchor"}); render(); }
+  else if(d.fval != null){
+    addMark({kind:"fresh", cycle: cycleNow(), value: Number(d.fval)});
+    if(navigator.vibrate) navigator.vibrate(18); render(); }
   else if(d.void){ DB.entries = DB.entries.filter(e => e.id !== d.void); save();
     document.getElementById("exlog").innerHTML = entryLog();
     const c = document.getElementById("cnt"); if(c) c.textContent = countLabel(); }
