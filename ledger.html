@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ledger">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#03070b">
+<title>Ledger</title>
+<style>
+:root{
+  --bg:#03070b; --panel:rgba(7,17,26,.8); --line:rgba(255,255,255,.16);
+  --text:#f5f5f5; --muted:#b6bdc7; --purple:#a855f7;
+  --green:#7bdc3a; --teal:#2dd4bf; --orange:#ff850b; --red:#ff383d; --amber:#facc15;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:radial-gradient(circle at 50% 6%, #102033 0%, #03070b 46%, #000 100%);
+  background-attachment:fixed;
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  min-height:100vh; padding:16px 14px 60px;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:940px;margin:0 auto}
+
+/* head */
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+.head h1{font-size:30px;font-weight:900;letter-spacing:-.7px;color:#fff}
+.head .stamp{font-size:11px;color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums;text-align:right;line-height:1.5}
+.head .stamp b{color:var(--purple);font-weight:800}
+.tagline{font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:14px;max-width:62ch}
+
+/* tabs */
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;padding:8px 14px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.03);
+     color:var(--muted);font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.tab:hover{color:#fff;border-color:rgba(255,255,255,.3)}
+.tab.on{background:rgba(168,85,247,.18);border-color:var(--purple);color:#fff}
+.tab:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
+
+/* panels */
+.panel{border:1px solid var(--line);border-radius:13px;background:var(--panel);margin-bottom:13px;overflow:hidden}
+.ph{padding:12px 15px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.ph h2{font-size:15px;font-weight:900;color:#fff;letter-spacing:-.2px}
+.ph .eyebrow{font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--purple)}
+.pb{padding:14px 15px}
+.pb.tight{padding:0}
+.note{font-size:12px;color:var(--muted);line-height:1.55}
+.note b{color:#fff;font-weight:700}
+.note + .note{margin-top:8px}
+
+/* species tag */
+.sp{display:inline-block;font-size:9.5px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;
+    padding:2px 7px;border-radius:5px;border:1px solid currentColor;vertical-align:middle}
+.sp.obs{color:var(--teal)} .sp.reg{color:var(--purple)} .sp.dec{color:var(--amber)} .sp.der{color:var(--muted)}
+
+/* grid + tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,.28);padding:11px 12px}
+.tile .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;font-weight:800}
+.tile .v{font-size:25px;font-weight:900;color:#fff;margin-top:3px;line-height:1;font-variant-numeric:tabular-nums}
+.tile .v small{font-size:12px;color:var(--muted);font-weight:700}
+.tile .s{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
+.tile.unknown .v{color:var(--muted)}
+.tile.ok .v{color:var(--green)} .tile.warn .v{color:var(--orange)} .tile.stop .v{color:var(--red)}
+
+/* buttons + inputs */
+button{font-family:inherit}
+.btn{padding:9px 14px;border-radius:9px;border:1px solid var(--purple);background:rgba(168,85,247,.18);
+     color:#fff;font-weight:800;font-size:13px;cursor:pointer}
+.btn:hover{background:rgba(168,85,247,.3)}
+.btn:disabled{background:rgba(120,120,140,.1);color:#6b7280;border-color:rgba(120,120,140,.25);cursor:not-allowed}
+.btn.ghost{border-color:var(--line);background:rgba(255,255,255,.04);color:var(--muted)}
+.btn.ghost:hover{color:#fff;border-color:rgba(255,255,255,.32)}
+.btn.sm{padding:6px 10px;font-size:11.5px;border-radius:7px}
+.btn.danger{border-color:var(--red);color:#ffb4b6;background:rgba(255,56,61,.12)}
+.btn:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input,select,textarea{
+  background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:8px;color:#fff;
+  font-family:inherit;font-size:14px;font-weight:700;padding:8px 10px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--purple)}
+textarea{width:100%;min-height:72px;font-weight:500;resize:vertical;line-height:1.5}
+label.fld{display:block;font-size:10px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.fldrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:11px}
+
+/* tables */
+table{width:100%;border-collapse:collapse}
+th{font-size:10px;text-transform:uppercase;letter-spacing:.09em;padding:9px 10px;text-align:left;
+   border-bottom:1px solid var(--line);font-weight:900;color:var(--muted)}
+td{font-size:13px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.07);font-weight:700;
+   font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+td.num{text-align:right}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:baseline}
+.dot.green{background:var(--green)}.dot.teal{background:var(--teal)}
+.dot.orange{background:var(--orange)}.dot.red{background:var(--red)}
+.c-green{color:var(--green)}.c-teal{color:var(--teal)}.c-orange{color:var(--orange)}
+.c-red{color:var(--red)}.c-purple{color:var(--purple)}.c-amber{color:var(--amber)}.c-muted{color:var(--muted)}
+
+/* class chips */
+.chip{display:inline-block;font-size:9.5px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;
+      padding:2px 7px;border-radius:20px;border:1px solid currentColor}
+.chip.target{color:var(--red)} .chip.checkpoint{color:var(--teal)}
+.chip.maintenance{color:var(--green)} .chip.closed{color:var(--muted)}
+
+/* joint grid */
+.jgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.jslot{border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,.28);padding:11px 12px}
+.jslot .jn{font-size:13px;font-weight:900;color:#fff;display:flex;justify-content:space-between;align-items:center}
+.jslot .jn .jv{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums}
+.jslot .anchor{font-size:10px;color:var(--muted);margin-top:2px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.scale{display:flex;gap:5px;margin-top:9px}
+.scale button{flex:1;padding:7px 0;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.04);
+              color:var(--muted);font-weight:900;font-size:13px;cursor:pointer}
+.scale button:hover{border-color:rgba(255,255,255,.35);color:#fff}
+.scale button.on{background:rgba(168,85,247,.25);border-color:var(--purple);color:#fff}
+.scale button.over{border-color:var(--red);color:#ffb4b6}
+.scale button:focus-visible{outline:2px solid var(--purple);outline-offset:1px}
+
+/* proposal */
+.prop{border:1px solid var(--amber);border-radius:12px;background:linear-gradient(180deg,rgba(250,204,21,.1),rgba(3,7,11,.5));
+      padding:14px;margin-bottom:11px}
+.prop .pt{font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.prop .pv{font-size:20px;font-weight:900;color:#fff;margin:6px 0 4px;letter-spacing:-.3px}
+.prop .pw{font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px}
+.prop .pw span{display:block;padding-left:12px;text-indent:-12px}
+.prop.blocked{border-color:var(--red);background:linear-gradient(180deg,rgba(255,56,61,.1),rgba(3,7,11,.5))}
+.prop.blocked .pt{color:var(--red)}
+
+/* log */
+.ev{display:grid;grid-template-columns:78px 1fr;gap:10px;padding:9px 15px;border-bottom:1px solid rgba(255,255,255,.07);
+    font-size:12.5px;align-items:baseline}
+.ev:last-child{border-bottom:0}
+.ev .when{color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums;font-size:11px}
+.ev .what{line-height:1.5}
+.ev .what b{color:#fff}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted);letter-spacing:-.2px}
+
+.banner{border-radius:10px;padding:11px 13px;font-size:12.5px;font-weight:700;line-height:1.5;margin-bottom:12px}
+.banner.warn{background:rgba(255,133,11,.13);border:1px solid var(--orange);color:#ffd0a1}
+.banner.stop{background:rgba(255,56,61,.13);border:1px solid var(--red);color:#ffb4b6}
+.banner.ok{background:rgba(123,220,58,.11);border:1px solid var(--green);color:#cdf3a8}
+
+.hide{display:none}
+.drop{border:2px dashed rgba(168,85,247,.45);border-radius:12px;padding:20px;text-align:center;
+      background:rgba(168,85,247,.05);cursor:pointer}
+.drop:hover,.drop.over{background:rgba(168,85,247,.12);border-color:var(--purple)}
+.drop .big{font-size:14px;font-weight:800;color:#fff}
+.drop .small{font-size:11.5px;color:var(--muted);margin-top:4px}
+@media(max-width:560px){
+  .head h1{font-size:25px}
+  .ev{grid-template-columns:64px 1fr}
+  body{padding:12px 10px 50px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <h1>Ledger</h1>
+    <div class="stamp" id="stamp"></div>
+  </div>
+  <div class="tagline">
+    One record. Observations are what was seen, the regime is what was decided in advance,
+    and a decision is the regime applied to observations it was written before.
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="view"></div>
+
+</div>
+<script>
+"use strict";
+
+/* ══════════════════════════════════════════════════════════════════════
+   1. CONTENT ADDRESSING
+   A regime is identified by the hash of its parameters, not by a label.
+   Two regimes with the same digest are the same regime whatever they are
+   called; renaming one changes nothing a decision can cite.
+   ══════════════════════════════════════════════════════════════════════ */
+function canon(x){
+  if(x===null || typeof x!=="object") return JSON.stringify(x);
+  if(Array.isArray(x)) return "["+x.map(canon).join(",")+"]";
+  return "{"+Object.keys(x).sort().map(k=>JSON.stringify(k)+":"+canon(x[k])).join(",")+"}";
+}
+async function sha256(str){
+  const buf = new TextEncoder().encode(str);
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+const shortD = d => d ? d.slice(0,10) : "—";
+
+/* ══════════════════════════════════════════════════════════════════════
+   2. THE LEDGER
+   Append-only. Three stored species: regime, observation, decision.
+   Derived values are NOT stored — they are recomputed from observations
+   on every render. Storing a derivation duplicates state that can later
+   disagree with the evidence it came from.
+   ══════════════════════════════════════════════════════════════════════ */
+const LS_KEY = "ledger.unified.v1";
+let L = {v:1, events:[]};
+let storeErr = null;
+
+function loadLedger(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){
+      const p = JSON.parse(raw);
+      if(p && Array.isArray(p.events)) L = p;
+    }
+  }catch(e){ storeErr = "Stored ledger could not be read. Nothing was overwritten."; }
+}
+function saveLedger(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(L)); storeErr = null; }
+  catch(e){ storeErr = "Storage is full or blocked. Export a backup before adding more."; }
+}
+function nextId(){
+  return String(L.events.length+1).padStart(5,"0")+"-"+Math.random().toString(36).slice(2,6);
+}
+function append(ev){
+  ev.id = nextId();
+  if(!ev.ts) ev.ts = Date.now();
+  L.events.push(ev);
+  saveLedger();
+  return ev;
+}
+const events   = sp => L.events.filter(e=>e.species===sp);
+const byId     = id => L.events.find(e=>e.id===id) || null;
+const obsOf    = k  => L.events.filter(e=>e.species==="observation" && e.kind===k);
+const newest   = (a,b) => b.ts - a.ts;
+
+/* ══════════════════════════════════════════════════════════════════════
+   3. REGIME
+   Parameters that give observations consequence. A regime event carries
+   effective_from = the moment it was written. There is no field for
+   backdating and the UI never offers one.
+   ══════════════════════════════════════════════════════════════════════ */
+const REGIONS = [
+  {id:"foot",     n:"Foot",     bi:1},
+  {id:"ankle",    n:"Ankle",    bi:1},
+  {id:"knee",     n:"Knee",     bi:1},
+  {id:"hip",      n:"Hip",      bi:1},
+  {id:"back",     n:"Back",     bi:0},
+  {id:"shoulder", n:"Shoulder", bi:1}
+];
+function slots(){
+  const out=[];
+  REGIONS.forEach(r => r.bi ? out.push({r:r.id,s:"L"},{r:r.id,s:"R"}) : out.push({r:r.id,s:null}));
+  return out;
+}
+const slotKey = (r,s) => r + (s ? ":"+s : "");
+const slotName = (r,s) => (REGIONS.find(x=>x.id===r)||{n:r}).n + (s ? " "+s : "");
+
+const SEED = {
+  joint:{
+    scale_max:5,          // the scale runs past the bound on purpose
+    theta_advance:1,      // J <= this: exposure may advance
+    theta_hold:2,         // J <= this: hold, no advance
+    theta_stop:3          // J >= this: close the exposure class
+  },
+  probe:{
+    pistol:{
+      depth_ref:"heel to floor, hamstring on calf",
+      tempo:"3s down, 1s pause, controlled up",
+      reps:1,
+      film:true,
+      note:"Score the knee immediately after this test, not from memory."
+    }
+  },
+  /* No budget is declared. null means unset, which is not the same claim as 0.
+     A cap arrives from history: the largest dose that was taken and then
+     observed to resolve. Until a dose has resolved, there is no number, and
+     the app says so rather than inventing one. */
+  budgets:{ STRUCTURE:null, CRUISE:null, RUN:null, SPEED:null },
+  frequency:{ min_gap_hours:48, speed_exposures_per_week:1 },
+  bands:{},   // filled from ZONES below at seed time
+  coverage:{
+    knee:"pistol", ankle:null, foot:null, hip:null, back:null, shoulder:null,
+    bone:null, tendon:null
+  },
+  freshness:{ days:21, target:10 }
+};
+
+function regimeAt(ts){
+  const rs = events("regime").filter(r=>r.effective_from<=ts).sort((a,b)=>b.effective_from-a.effective_from);
+  return rs[0] || null;
+}
+function currentRegime(){ return regimeAt(Date.now()); }
+function P(){ const r=currentRegime(); return r ? r.params : SEED; }
+
+/* A decision may only cite evidence the regime was written before.
+   This is the whole force of pre-registration: a threshold moved after
+   seeing a score cannot reach back and govern it. */
+function governs(reg, evIds){
+  const missing = evIds.filter(id => !byId(id));
+  const late = evIds.map(byId).filter(Boolean).filter(e => e.ts < reg.effective_from);
+  return {ok: late.length===0 && missing.length===0, late, missing};
+}
+
+async function amendRegime(params, reason){
+  const digest = await sha256(canon(params));
+  const cur = currentRegime();
+  if(cur && cur.digest===digest) return {ok:false, why:"No parameter changed. Nothing recorded."};
+  const ev = append({
+    species:"regime",
+    digest,
+    parent: cur ? cur.digest : null,
+    effective_from: Date.now(),
+    reason: reason || "",
+    params
+  });
+  return {ok:true, ev};
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   4. DECISIONS
+   A decision is the regime applied to recorded observations. It stores
+   its inputs, not its reasoning: regime digest, evidence ids, and any
+   input that was not one of those.
+   ══════════════════════════════════════════════════════════════════════ */
+const OUTCOMES = ["advance","hold","reduce","alter","close"];
+
+function recordDecision(scope, outcome, evidence, external){
+  const reg = currentRegime();
+  if(!reg) return {ok:false, why:"No regime is in force. Write one first."};
+  const g = governs(reg, evidence);
+  if(g.missing.length){
+    return {ok:false, why:"Refused. "+g.missing.length+" cited entries are not in the ledger."};
+  }
+  if(!g.ok){
+    return {ok:false, why:"Refused. The regime in force was written after "+g.late.length+
+      " of the observations cited. Evidence recorded before a regime cannot be governed by it."};
+  }
+  const ev = append({
+    species:"decision",
+    scope, outcome,
+    regime_digest: reg.digest,
+    evidence: evidence.slice(),
+    external_inputs: external || {}
+  });
+  return {ok:true, ev};
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   5. CATALOGUES
+   ══════════════════════════════════════════════════════════════════════ */
+const EX = {
+  pla:{n:"Planche progression",s:"push",g:"Skill strength",iso:1,bw:1,vars:["Tuck","Adv. tuck","Straddle","Half lay","Full"]},
+  bp:{n:"Bench press",s:"push",g:"Press"},
+  pu:{n:"Push-ups",s:"push",g:"Press",bw:1},
+  sap:{n:"Standing single-arm press",s:"push",g:"Press"},
+  blr:{n:"Banded lateral raise",s:"push",g:"Shoulders",bw:1},
+  wlr:{n:"Weighted lateral raise",s:"push",g:"Shoulders"},
+  ctp:{n:"Cable triceps pushdown",s:"push",g:"Arms"},
+  fle:{n:"Ring front lever",s:"pull",g:"Skill strength",iso:1,bw:1,vars:["Tuck","Adv. tuck","One-leg","Straddle","Full"]},
+  pc:{n:"Power clean",s:"pull",g:"Power"},
+  sld:{n:"Straight-leg deadlift",s:"pull",g:"Hinge"},
+  wpu:{n:"Weighted neutral pull-up",s:"pull",g:"Vertical pull",bw:1},
+  rap:{n:"Ring archer pull-up",s:"pull",g:"Vertical pull",bw:1},
+  oap:{n:"One-arm pull-up",s:"pull",g:"Vertical pull",bw:1,vars:["Band","Two-finger","One-finger","Towel","Free"]},
+  hcr:{n:"Standing high cable row",s:"pull",g:"Horizontal pull"},
+  idc:{n:"Incline dumbbell curl",s:"pull",g:"Arms"},
+  fw:{n:"Forearm work",s:"pull",g:"Forearms"},
+  tsl:{n:"Trap bar single-leg DL",s:"legs",g:"Hinge"},
+  gbm:{n:"Glute bridge machine",s:"legs",g:"Hip"},
+  ghr:{n:"Glute-ham raise",s:"legs",g:"Hip",bw:1},
+  lex:{n:"Leg extension",s:"legs",g:"Knee"},
+  lcu:{n:"Leg curl",s:"legs",g:"Knee"},
+  cra:{n:"Standing calf raise",s:"legs",g:"Lower leg"},
+  tib:{n:"Tibialis raise",s:"legs",g:"Lower leg"},
+  pis:{n:"Pistol squat (probe)",s:"legs",g:"Knee",bw:1,probe:1}
+};
+const SPLITS = {push:"Push", pull:"Pull", legs:"Legs"};
+
+const GROUPS = {
+  STRUCTURE:{icon:"▪", color:"green",  desc:"Foundation",          kind:"walk"},
+  CRUISE:   {icon:"▪", color:"teal",   desc:"Comfortable running", kind:"cruise"},
+  RUN:      {icon:"▪", color:"orange", desc:"Performance running", kind:"run"},
+  SPEED:    {icon:"▪", color:"red",    desc:"Neuromuscular",       kind:"speed"}
+};
+const SPIKE_MPS = 32/3.6;
+const ZONES = [
+  {group:"STRUCTURE", name:"Power Walk", pace:"7:00–8:00 /km",   lo:2.083, hi:2.381, color:"green"},
+  {group:"STRUCTURE", name:"Brisk Walk", pace:"8:00–9:00 /km",   lo:1.852, hi:2.083, color:"green"},
+  {group:"STRUCTURE", name:"Walk",       pace:"9:00–10:00 /km",  lo:1.667, hi:1.852, color:"green"},
+  {group:"STRUCTURE", name:"Easy Walk",  pace:"10:00–11:00 /km", lo:1.515, hi:1.667, color:"green"},
+  {group:"STRUCTURE", name:"Stroll",     pace:"11:00–12:00 /km", lo:1.389, hi:1.515, color:"green"},
+  {group:"STRUCTURE", name:"Ambient",    pace:"12:00+ /km",      lo:0.0,   hi:1.389, color:"green"},
+  {group:"CRUISE",    name:"Easy",       pace:"6:00–7:00 /km",   lo:2.381, hi:2.778, color:"teal"},
+  {group:"CRUISE",    name:"Continuous", pace:"5:30–6:00 /km",   lo:2.778, hi:3.030, color:"teal"},
+  {group:"RUN",   name:"5:15–5:30", pace:"/km", lo:3.030, hi:3.175, color:"orange"},
+  {group:"RUN",   name:"5:00–5:15", pace:"/km", lo:3.175, hi:3.333, color:"orange"},
+  {group:"RUN",   name:"4:45–5:00", pace:"/km", lo:3.333, hi:3.509, color:"orange"},
+  {group:"RUN",   name:"4:30–4:45", pace:"/km", lo:3.509, hi:3.704, color:"orange"},
+  {group:"RUN",   name:"4:15–4:30", pace:"/km", lo:3.704, hi:3.922, color:"orange"},
+  {group:"RUN",   name:"4:00–4:15", pace:"/km", lo:3.922, hi:4.167, color:"orange"},
+  {group:"RUN",   name:"3:45–4:00", pace:"/km", lo:4.167, hi:4.444, color:"orange"},
+  {group:"RUN",   name:"3:30–3:45", pace:"/km", lo:4.444, hi:4.762, color:"orange"},
+  {group:"RUN",   name:"3:15–3:30", pace:"/km", lo:4.762, hi:5.128, color:"orange"},
+  {group:"RUN",   name:"3:00–3:15", pace:"/km", lo:5.128, hi:5.556, color:"orange"},
+  {group:"SPEED", name:"2:45–3:00", pace:"/km", lo:5.556, hi:6.061, color:"red"},
+  {group:"SPEED", name:"2:30–2:45", pace:"/km", lo:6.061, hi:6.667, color:"red"},
+  {group:"SPEED", name:"2:15–2:30", pace:"/km", lo:6.667, hi:7.407, color:"red"},
+  {group:"SPEED", name:"2:00–2:15", pace:"/km", lo:7.407, hi:8.333, color:"red"},
+  {group:"SPEED", name:"1:45–2:00", pace:"/km", lo:8.333, hi:9.524, color:"red"},
+  {group:"SPEED", name:"1:30–1:45", pace:"/km", lo:9.524, hi:999,   color:"red"}
+];
+/* Seed band classification: only the raced demand is a target. Everything
+   below it is passed through. See §6 of the canon section — a checkpoint is
+   probed once and left; a target is repeated until it stops responding. */
+ZONES.forEach(z=>{
+  SEED.bands[z.name] = z.group==="STRUCTURE" ? "maintenance"
+                     : z.name==="2:15–2:30"  ? "target"
+                     : "checkpoint";
+});
+function assignZone(v){
+  if(!isFinite(v) || v<=0 || v>=SPIKE_MPS) return null;
+  for(const z of ZONES){ if(v>=z.lo && v<z.hi) return z.name; }
+  return null;
+}
+const zoneOf = n => ZONES.find(z=>z.name===n) || null;
+const groupOfZone = n => (zoneOf(n)||{}).group || null;
+
+/* ══════════════════════════════════════════════════════════════════════
+   6. TIME
+   ══════════════════════════════════════════════════════════════════════ */
+const DAY_MS = 86400000;
+const pad = n => String(n).padStart(2,"0");
+function dayKey(ts){ const d=new Date(ts); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function clock(ts){ const d=new Date(ts); return pad(d.getHours())+":"+pad(d.getMinutes()); }
+function dayLabel(k){
+  const p=k.split("-").map(Number);
+  return new Date(p[0],p[1]-1,p[2]).toLocaleDateString(undefined,{weekday:"short",day:"2-digit",month:"short"}).toUpperCase();
+}
+function ago(ts){
+  const s=Math.round((Date.now()-ts)/1000);
+  if(s<60) return s+"s ago";
+  const m=Math.floor(s/60); if(m<60) return m+"m ago";
+  const h=Math.floor(m/60); if(h<48) return h+"h ago";
+  return Math.floor(h/24)+"d ago";
+}
+const comma = n => Math.round(n).toLocaleString("en-US");
+const todayK = () => dayKey(Date.now());
+
+/* ══════════════════════════════════════════════════════════════════════
+   7. DERIVATION  (recomputed, never stored)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* latest joint observation per slot, on or before a day */
+function jointLatest(){
+  const out={};
+  obsOf("joint").sort(newest).forEach(m=>{
+    const k=slotKey(m.region,m.side);
+    if(!(k in out)) out[k]=m;
+  });
+  return out;
+}
+function jointOnDay(dayK){
+  const out={};
+  obsOf("joint").sort(newest).forEach(m=>{
+    if(dayKey(m.ts)!==dayK) return;
+    const k=slotKey(m.region,m.side);
+    if(!(k in out)) out[k]=m;
+  });
+  return out;
+}
+/* trajectory for one slot: every score, oldest first */
+function jointTrack(region, side){
+  return obsOf("joint").filter(m=>m.region===region && m.side===side).sort((a,b)=>a.ts-b.ts);
+}
+/* time from an exposure to the first score at or under theta_advance */
+function clearanceAfter(ts, region, side){
+  const th = P().joint.theta_advance;
+  const after = jointTrack(region,side).filter(m=>m.ts>ts);
+  const hit = after.find(m=>m.value<=th);
+  return hit ? {hours:(hit.ts-ts)/3600000, at:hit} : null;
+}
+
+/* worst current reading and which threshold band it sits in */
+function jointStatus(){
+  const got=jointLatest(), all=slots();
+  const vals=all.map(x=>got[slotKey(x.r,x.s)]).filter(Boolean);
+  const worst=vals.reduce((t,m)=>Math.max(t,m.value),-1);
+  const p=P().joint;
+  let band="unscored";
+  if(worst>=0) band = worst>=p.theta_stop ? "stop" : worst>p.theta_advance ? "hold" : "clear";
+  return {got, scored:vals.length, total:all.length, worst, band};
+}
+
+/* running exposures grouped by day and band */
+function runByDay(){
+  const out={};
+  obsOf("run").forEach(o=>{
+    const d=o.date || dayKey(o.ts);
+    out[d]=out[d]||{};
+    out[d][o.band]=(out[d][o.band]||0)+ (o.steps||0);
+  });
+  return out;
+}
+function spentToday(){
+  const day=runByDay()[todayK()]||{};
+  const g={STRUCTURE:0,CRUISE:0,RUN:0,SPEED:0};
+  Object.keys(day).forEach(b=>{ const gr=groupOfZone(b); if(gr) g[gr]+=day[b]; });
+  return g;
+}
+function lastRunExposure(minGroup){
+  const rank={STRUCTURE:0,CRUISE:1,RUN:2,SPEED:3};
+  const es=obsOf("run").filter(o=>rank[groupOfZone(o.band)]>=rank[minGroup]).sort(newest);
+  return es[0]||null;
+}
+function bandExposures(bandName){
+  return obsOf("run").filter(o=>o.band===bandName).sort((a,b)=>a.ts-b.ts);
+}
+
+/* ── proven dose ──────────────────────────────────────────────────────
+   A dose is proven when it was taken and then observed to resolve: every
+   slot scored in the window after it came back to theta_advance or under,
+   and nothing in that window reached theta_stop.
+
+   An unread window is not a resolved one. If no joint was scored between
+   an exposure and the next one, that dose proves nothing, whatever it felt
+   like. The account's ceiling is the largest dose that has actually cleared.
+   ──────────────────────────────────────────────────────────────────── */
+function dailyDose(group){
+  const out={};
+  obsOf("run").forEach(o=>{
+    if(groupOfZone(o.band)!==group) return;
+    const d=o.date||dayKey(o.ts);
+    out[d]=out[d]||{steps:0, ids:[], last:0};
+    out[d].steps+=(o.steps||0);
+    out[d].ids.push(o.id);
+    out[d].last=Math.max(out[d].last,o.ts);
+  });
+  return out;
+}
+function endOfDay(dk){ const p=dk.split("-").map(Number); return new Date(p[0],p[1]-1,p[2],23,59,59,999).getTime(); }
+
+function resolvedDoses(group){
+  const p=P().joint, doses=dailyDose(group);
+  const days=Object.keys(doses).sort();
+  const out=[];
+  days.forEach((d,i)=>{
+    const from=Math.max(doses[d].last, endOfDay(d));
+    const to = i+1<days.length ? endOfDay(days[i+1]) - DAY_MS : Date.now();
+    if(to<=from) return;                                   // next exposure came first
+    const scores=obsOf("joint").filter(m=>m.ts>from && m.ts<=to);
+    if(!scores.length) return;                             // unread window proves nothing
+    if(scores.some(m=>m.value>=p.theta_stop)) return;      // something objected
+    const bySlot={};
+    scores.sort((a,b)=>a.ts-b.ts).forEach(m=>{ bySlot[slotKey(m.region,m.side)]=m; });
+    const keys=Object.keys(bySlot);
+    if(!keys.length) return;
+    if(!keys.every(k=>bySlot[k].value<=p.theta_advance)) return;
+    out.push({day:d, steps:doses[d].steps, ids:doses[d].ids,
+              clearedBy:keys.map(k=>bySlot[k].id), slots:keys.length});
+  });
+  return out.sort((a,b)=>b.steps-a.steps);
+}
+function provenDose(group){
+  const r=resolvedDoses(group);
+  return r.length ? r[0] : null;
+}
+/* What the account is capped at right now, and where that number came from. */
+function ceilingOf(group){
+  const declared=P().budgets[group];
+  if(declared!=null && declared!=="") return {steps:Number(declared), source:"declared", ev:null};
+  const pv=provenDose(group);
+  if(pv) return {steps:pv.steps, source:"proven", ev:pv};
+  return {steps:null, source:"unset", ev:null};
+}
+
+/* gym */
+const setsOf = (id,k) => obsOf("set").filter(e=>e.ex===id && (!k||dayKey(e.ts)===k)).sort(newest);
+function gymDays(){ return [...new Set(obsOf("set").map(e=>dayKey(e.ts)))].sort().reverse(); }
+function figureOf(e){
+  const m=EX[e.ex]||{};
+  const load=(e.w===0 && m.bw)?"BW":String(e.w);
+  return load+"×"+(m.iso ? (e.hold||0)+"s" : String(e.reps||0));
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   8. PROPOSALS
+   A proposal is a derivation. It is displayed, not stored. It becomes a
+   decision only when it is recorded — with the regime that produced it
+   and the evidence it read. The gap between the two is the point.
+   ══════════════════════════════════════════════════════════════════════ */
+function proposals(){
+  const out=[], p=P(), js=jointStatus();
+
+  /* — joint gate — */
+  if(js.worst>=0){
+    const over=[];
+    Object.keys(js.got).forEach(k=>{ if(js.got[k].value>p.joint.theta_advance) over.push(js.got[k]); });
+    if(js.worst>=p.joint.theta_stop){
+      out.push({
+        scope:"running exposure", outcome:"close",
+        why:["Worst standing joint score is "+js.worst+".",
+             "Regime closes the class at "+p.joint.theta_stop+"."],
+        evidence: over.map(o=>o.id)
+      });
+    }else if(js.worst>p.joint.theta_advance){
+      out.push({
+        scope:"running exposure", outcome:"hold",
+        why:["Worst standing joint score is "+js.worst+".",
+             "Regime advances at "+p.joint.theta_advance+" or under."],
+        evidence: over.map(o=>o.id)
+      });
+    }
+  }
+
+  /* — frequency gate — */
+  const last = lastRunExposure("CRUISE");
+  if(last){
+    const hrs=(Date.now()-last.ts)/3600000;
+    if(hrs < p.frequency.min_gap_hours){
+      out.push({
+        scope:"running exposure", outcome:"hold",
+        why:[Math.round(hrs)+"h since the last running exposure ("+last.band+").",
+             "Regime requires "+p.frequency.min_gap_hours+"h."],
+        evidence:[last.id]
+      });
+    }
+  }
+
+  /* — band ladder — */
+  const ladder = ZONES.filter(z=>z.group!=="STRUCTURE");
+  const done = ladder.filter(z=>bandExposures(z.name).length>0);
+  const highest = done.length ? done[done.length-1] : null;
+  if(highest){
+    const cls = p.bands[highest.name] || "checkpoint";
+    const ex  = bandExposures(highest.name);
+    const lastEx = ex[ex.length-1];
+    const kneeL = clearanceAfter(lastEx.ts,"knee","L"), kneeR = clearanceAfter(lastEx.ts,"knee","R");
+    const cleared = kneeL && kneeR;
+    const next = ladder[ladder.indexOf(highest)+1];
+    if(cls==="checkpoint" && cleared && next){
+      out.push({
+        scope:"band "+highest.name+" → "+next.name, outcome:"advance",
+        why:["A checkpoint is probed once, not owned.",
+             "One exposure recorded at "+highest.name+".",
+             "Knee returned to "+p.joint.theta_advance+" or under on both sides."],
+        evidence:[lastEx.id, kneeL.at.id, kneeR.at.id]
+      });
+    }else if(cls==="checkpoint" && !cleared){
+      out.push({
+        scope:"band "+highest.name, outcome:"hold",
+        why:["Checkpoint exposure recorded, no clearing score yet on both knees.",
+             "Score the anchored probe before this reads either way."],
+        evidence:[lastEx.id]
+      });
+    }else if(cls==="target"){
+      out.push({
+        scope:"band "+highest.name, outcome: cleared ? "hold" : "hold",
+        why:["This band is a target, not a checkpoint. It is repeated until it stops producing a response.",
+             ex.length+" exposure"+(ex.length===1?"":"s")+" recorded so far."],
+        evidence:[lastEx.id]
+      });
+    }
+  }
+
+  /* — dose ceiling — */
+  const spent=spentToday();
+  Object.keys(GROUPS).forEach(g=>{
+    const c=ceilingOf(g), used=spent[g]||0;
+    if(used<=0) return;
+    const todayIds=obsOf("run").filter(o=>(o.date||dayKey(o.ts))===todayK() && groupOfZone(o.band)===g).map(o=>o.id);
+    if(c.steps==null){
+      out.push({
+        scope:g+" dose", outcome:"hold",
+        why:[comma(used)+" steps recorded in "+g+" today.",
+             "No dose in this account has been taken and then seen to clear, so there is no ceiling to be inside of.",
+             "Score the joints and let one window resolve. That is what produces the number."],
+        evidence: todayIds
+      });
+    }else if(used>c.steps){
+      out.push({
+        scope:g+" dose", outcome:"reduce",
+        why:[comma(used)+" steps today against a ceiling of "+comma(c.steps)+".",
+             c.source==="proven" ? "That ceiling is the largest dose that resolved ("+c.ev.day+")."
+                                 : "That ceiling is declared in the regime."],
+        evidence: todayIds.concat(c.ev?c.ev.ids:[])
+      });
+    }
+  });
+  return out;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   9. COVERAGE
+   What each probe actually interrogates, and what nothing reaches.
+   ══════════════════════════════════════════════════════════════════════ */
+const COVERAGE_ROWS = [
+  {what:"Knee, high force / low rate", probe:"pistol",  kind:"anchored",
+   how:"Fixed task: depth, tempo and control pinned by the regime, filmed."},
+  {what:"Knee, high rate (impact)",    probe:null,      kind:"none",
+   how:"No probe. Not reachable by any gym movement."},
+  {what:"Ankle · foot · hip · back · shoulder", probe:"joint", kind:"unanchored",
+   how:"Self-scored on a defined scale. No fixed task holding the scale still."},
+  {what:"Force production",            probe:"set",     kind:"anchored",
+   how:"Kilograms and reps. Units defined outside the observer."},
+  {what:"Pace and step count",         probe:"run",     kind:"anchored",
+   how:"Device measurement. Units defined outside the observer."},
+  {what:"Bone — tibial accumulation",  probe:null,      kind:"none",
+   how:"No probe available short of imaging. Governed by dose caps because there is nothing to read."},
+  {what:"Tendon — collagen turnover",  probe:null,      kind:"none",
+   how:"No probe available. Response timescale exceeds any signal in reach."}
+];
+
+/* ══════════════════════════════════════════════════════════════════════
+   10. CSV INGEST
+   Nothing leaves the device. Files are read in the browser and turned
+   into run observations: one per day, per band, with a step count.
+   ══════════════════════════════════════════════════════════════════════ */
+function parseCSV(text){
+  const rows=[]; let i=0, field="", row=[], q=false;
+  text=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+  while(i<text.length){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; }
+      else field+=c;
+    }else{
+      if(c==='"') q=true;
+      else if(c===","){ row.push(field); field=""; }
+      else if(c==="\n"){ row.push(field); rows.push(row); row=[]; field=""; }
+      else field+=c;
+    }
+    i++;
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  if(!rows.length) return [];
+  const head=rows[0].map(h=>h.trim());
+  return rows.slice(1).filter(r=>r.length>1).map(r=>{
+    const o={}; head.forEach((h,j)=>o[h]=(r[j]||"").trim()); return o;
+  });
+}
+function findCol(cols, want, avoid){
+  avoid=avoid||[];
+  for(const c of cols){
+    const cl=c.toLowerCase();
+    if(want.every(w=>cl.includes(w)) && !avoid.some(a=>cl.includes(a))) return c;
+  }
+  return null;
+}
+function median(a){
+  if(!a.length) return 0;
+  const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2);
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+}
+/* returns {date -> {band -> steps}} plus a short report */
+function samplesFromRows(rows, report){
+  if(!rows.length){ report.push("empty file"); return []; }
+  const cols=Object.keys(rows[0]);
+  const timeCol  = findCol(cols,["timestamp"]) || findCol(cols,["time"]) || findCol(cols,["date"]);
+  const speedCol = findCol(cols,["stryd","speed"],["dist"]) || findCol(cols,["watch","speed"],["dist"]) || findCol(cols,["speed"],["dist"]);
+  const cadCol   = findCol(cols,["cadence"]);
+  if(!speedCol){ report.push("no speed column found"); return []; }
+  const raw=rows.map(r=>({
+    ts: timeCol ? (Number(new Date(r[timeCol]).getTime()) || Number(r[timeCol])) : NaN,
+    spd: Number(r[speedCol]),
+    cad: cadCol ? Number(r[cadCol]) : 0
+  })).filter(x=>isFinite(x.spd));
+  /* Files arrive with timestamps in seconds or milliseconds. Settle the scale
+     once, before any interval is taken from them — a seconds file read as
+     milliseconds turns every sample interval into a millisecond and every
+     step count into zero. */
+  const medT=median(raw.map(x=>x.ts).filter(isFinite));
+  const tScale = (medT>0 && medT<1e11) ? 1000 : 1;
+  raw.forEach(x=>{ if(isFinite(x.ts)) x.ts*=tScale; });
+  const medS=median(raw.map(x=>x.spd).filter(x=>x>0));
+  const out=[];
+  for(let i=0;i<raw.length;i++){
+    let dt=1;
+    if(i>0 && isFinite(raw[i].ts) && isFinite(raw[i-1].ts)){
+      const d=(raw[i].ts-raw[i-1].ts)/1000;
+      if(d>0 && d<10) dt=d;
+    }
+    const v = medS>6 ? raw[i].spd/3.6 : raw[i].spd;      // km/h files vs m/s files
+    const steps = raw[i].cad>0 ? raw[i].cad*dt/60 : dt*2.6;
+    let date=null;
+    if(isFinite(raw[i].ts)){
+      const d=new Date(raw[i].ts);
+      if(d.getFullYear()>2000) date=dayKey(d.getTime());
+    }
+    out.push({date, v, steps});
+  }
+  report.push(out.length+" samples");
+  return out;
+}
+function ingest(samples, fallbackDate){
+  const byDay={};
+  samples.forEach(s=>{
+    const b=assignZone(s.v); if(!b) return;
+    const d=s.date||fallbackDate;
+    byDay[d]=byDay[d]||{};
+    byDay[d][b]=(byDay[d][b]||0)+s.steps;
+  });
+  let n=0;
+  Object.keys(byDay).forEach(d=>{
+    Object.keys(byDay[d]).forEach(b=>{
+      const steps=Math.round(byDay[d][b]);
+      if(steps<1) return;
+      append({species:"observation", kind:"run", date:d, band:b, steps, source:"import"});
+      n++;
+    });
+  });
+  return n;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   11. RENDER
+   ══════════════════════════════════════════════════════════════════════ */
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const TABS = [["today","Today"],["run","Run"],["gym","Gym"],["joint","Joint"],["regime","Regime"],["log","Ledger"]];
+let TAB = "today";
+let flash = null;
+
+function render(){
+  document.getElementById("stamp").innerHTML =
+    dayLabel(todayK())+"<br>regime <b>"+shortD((currentRegime()||{}).digest)+"</b> · "+L.events.length+" events";
+  document.getElementById("tabs").innerHTML =
+    TABS.map(([k,n])=>'<button class="tab'+(TAB===k?" on":"")+'" data-tab="'+k+'">'+n+'</button>').join("");
+  const v=document.getElementById("view");
+  let html = "";
+  if(storeErr) html += '<div class="banner stop">'+esc(storeErr)+'</div>';
+  if(flash)    html += '<div class="banner '+flash.k+'">'+esc(flash.m)+'</div>';
+  html += ({today:viewToday, run:viewRun, gym:viewGym, joint:viewJoint, regime:viewRegime, log:viewLog}[TAB])();
+  v.innerHTML = html;
+  flash = null;
+}
+
+/* ── shared bits ── */
+function budgetTiles(){
+  const spent=spentToday();
+  return '<div class="tiles">'+Object.keys(GROUPS).map(g=>{
+    const c=ceilingOf(g), used=spent[g]||0;
+    if(c.steps==null){
+      return '<div class="tile unknown"><div class="k">'+g+'</div>'+
+        '<div class="v">UNSET</div>'+
+        '<div class="s">'+comma(used)+' steps today · no dose has resolved yet</div></div>';
+    }
+    const left=Math.max(0,c.steps-used);
+    const cls = left===0 ? "stop" : left<c.steps*0.34 ? "warn" : "ok";
+    return '<div class="tile '+cls+'"><div class="k">'+g+'</div>'+
+      '<div class="v">'+comma(left)+' <small>left</small></div>'+
+      '<div class="s">'+comma(used)+' of '+comma(c.steps)+' · '+
+      (c.source==="proven" ? 'largest dose that resolved ('+esc(c.ev.day)+')' : 'declared in regime')+
+      '</div></div>';
+  }).join("")+'</div>';
+}
+function provenTable(){
+  let h='<table><thead><tr><th>Account</th><th class="num">Ceiling</th><th>Where it came from</th></tr></thead><tbody>';
+  Object.keys(GROUPS).forEach(g=>{
+    const c=ceilingOf(g), all=resolvedDoses(g);
+    let src;
+    if(c.source==="unset") src='<span class="c-muted">Nothing has resolved. No number to give.</span>';
+    else if(c.source==="declared") src='<span class="c-amber">Declared in the regime, overriding history.</span>';
+    else src='<span class="c-green">'+esc(c.ev.day)+'</span> <span class="c-muted">· cleared on '+c.ev.slots+
+             ' scored slot'+(c.ev.slots===1?"":"s")+' · '+all.length+' resolved dose'+(all.length===1?"":"s")+' on record</span>';
+    h+='<tr><td><span class="dot '+GROUPS[g].color+'"></span>'+g+'</td>'+
+       '<td class="num '+(c.steps==null?"c-muted":"")+'">'+(c.steps==null?"UNSET":comma(c.steps))+'</td>'+
+       '<td>'+src+'</td></tr>';
+  });
+  return h+'</tbody></table>';
+}
+function propHTML(pr,i){
+  const reg=currentRegime();
+  const g = reg ? governs(reg, pr.evidence) : {ok:false,late:[]};
+  const blocked = !g.ok;
+  return '<div class="prop'+(blocked?" blocked":"")+'">'+
+    '<div class="pt">'+(blocked?"Cannot be decided":"Proposal · derived, not recorded")+'</div>'+
+    '<div class="pv">'+esc(pr.outcome.toUpperCase())+' — '+esc(pr.scope)+'</div>'+
+    '<div class="pw">'+pr.why.map(w=>'<span>· '+esc(w)+'</span>').join("")+
+      '<span class="mono">regime '+shortD(reg&&reg.digest)+' · evidence '+(pr.evidence.length?pr.evidence.map(esc).join(", "):"none")+'</span>'+
+      (blocked?'<span class="c-red">· '+g.late.length+' cited observation(s) predate the regime in force. Not governable by it.</span>':'')+
+    '</div>'+
+    '<button class="btn sm" data-act="decide" data-i="'+i+'"'+(blocked?" disabled":"")+'>Record this decision</button>'+
+    '</div>';
+}
+
+/* ── TODAY ── */
+function viewToday(){
+  const js=jointStatus(), p=P(), prs=proposals();
+  let h="";
+  if(!currentRegime()){
+    h+='<div class="banner warn">No regime is in force. Open Regime and write one before recording anything that depends on it.</div>';
+  }
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span><h2>Standing joint state</h2></div>'+
+     '<span class="sp obs">observation</span></div><div class="pb">'+
+     '<div class="tiles">'+
+       '<div class="tile '+(js.band==="clear"?"ok":js.band==="hold"?"warn":js.band==="stop"?"stop":"unknown")+'">'+
+         '<div class="k">Worst standing score</div><div class="v">'+(js.worst<0?"—":js.worst)+'</div>'+
+         '<div class="s">'+js.scored+' of '+js.total+' slots scored</div></div>'+
+       '<div class="tile"><div class="k">Advance at</div><div class="v">≤'+p.joint.theta_advance+'</div>'+
+         '<div class="s">hold above · close at '+p.joint.theta_stop+'</div></div>'+
+       '<div class="tile unknown"><div class="k">Bone state</div><div class="v">UNKNOWN</div>'+
+         '<div class="s">no probe reaches it — governed by dose cap</div></div>'+
+     '</div></div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Derived</span><h2>Today\u2019s step budgets</h2></div>'+
+     '<span class="sp der">derived</span></div><div class="pb">'+budgetTiles()+
+     '<div class="note" style="margin-top:11px">Four accounts, no exchange rate. A walking step does not buy a sprint step. '+
+     'A ceiling is the largest dose that was taken and then seen to clear — not a figure set in advance. '+
+     'Until one clears, the account reads UNSET, which is a different claim from zero.</div>'+
+     '</div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Regime applied to evidence</span><h2>Open proposals</h2></div>'+
+     '<span class="sp dec">policy</span></div><div class="pb">';
+  h+= prs.length ? prs.map(propHTML).join("")
+    : '<div class="note">Nothing to decide. No observation currently crosses a threshold the regime speaks to.</div>';
+  h+='</div></div>';
+
+  const recent=L.events.slice(-6).reverse();
+  h+='<div class="panel"><div class="ph"><h2>Last six entries</h2></div><div class="pb tight">'+
+     (recent.length?recent.map(evHTML).join(""):'<div class="pb"><div class="note">Nothing recorded yet.</div></div>')+
+     '</div></div>';
+  return h;
+}
+
+/* ── RUN ── */
+function viewRun(){
+  const p=P();
+  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">Derived</span><h2>Step budgets today</h2></div></div>'+
+        '<div class="pb">'+budgetTiles()+'</div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Derived from history</span><h2>Where each ceiling came from</h2></div>'+
+     '<span class="sp der">derived</span></div><div class="pb tight">'+provenTable()+'</div>'+
+     '<div class="pb"><div class="note">A dose counts as resolved when every slot scored after it came back to '+
+     P().joint.theta_advance+' or under, and nothing in that window reached '+P().joint.theta_stop+'. '+
+     'A window with no joint scores in it proves nothing — an unread dose is not a cleared one.</div></div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span><h2>Record an exposure</h2></div>'+
+     '<span class="sp obs">observation</span></div><div class="pb">'+
+     '<div class="fldrow">'+
+       '<div><label class="fld">Band</label><select id="rBand">'+
+         ZONES.map(z=>'<option value="'+esc(z.name)+'">'+esc(z.name)+' · '+esc(z.group)+'</option>').join("")+'</select></div>'+
+       '<div><label class="fld">Steps</label><input id="rSteps" type="number" inputmode="numeric" value="0"></div>'+
+       '<div><label class="fld">Seconds</label><input id="rSecs" type="number" inputmode="numeric" value="0"></div>'+
+       '<div><label class="fld">Date</label><input id="rDate" type="date" value="'+todayK()+'"></div>'+
+     '</div>'+
+     '<button class="btn" data-act="addrun">Record exposure</button></div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span><h2>Import device data</h2></div></div>'+
+     '<div class="pb"><div class="drop" id="drop"><div class="big">Drop Stryd or Apple Health CSV files</div>'+
+     '<div class="small">Read in the browser. Nothing leaves the device.</div></div>'+
+     '<input type="file" id="fileInput" accept=".csv" multiple class="hide">'+
+     '<div class="note" id="importNote" style="margin-top:10px"></div></div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Regime</span><h2>Band ladder</h2></div>'+
+     '<span class="sp reg">regime</span></div><div class="pb tight"><table><thead><tr>'+
+     '<th>Band</th><th>Class</th><th class="num">Exposures</th><th class="num">Last</th></tr></thead><tbody>';
+  ZONES.forEach(z=>{
+    const cls=p.bands[z.name]||"checkpoint", ex=bandExposures(z.name);
+    const last=ex.length?ex[ex.length-1]:null;
+    h+='<tr><td><span class="dot '+z.color+'"></span>'+esc(z.name)+
+       ' <span class="c-muted" style="font-weight:600">'+esc(z.pace)+'</span></td>'+
+       '<td><span class="chip '+cls+'">'+cls+'</span></td>'+
+       '<td class="num">'+ex.length+'</td>'+
+       '<td class="num c-muted">'+(last?ago(last.ts):"—")+'</td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+  return h;
+}
+
+/* ── GYM ── */
+function viewGym(){
+  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span><h2>Record a set</h2></div>'+
+        '<span class="sp obs">observation</span></div><div class="pb">'+
+        '<div class="fldrow">'+
+        '<div><label class="fld">Movement</label><select id="gEx">'+
+          Object.keys(SPLITS).map(s=>'<optgroup label="'+SPLITS[s]+'">'+
+            Object.keys(EX).filter(k=>EX[k].s===s).map(k=>'<option value="'+k+'">'+esc(EX[k].n)+'</option>').join("")+
+          '</optgroup>').join("")+'</select></div>'+
+        '<div><label class="fld">Load (kg, 0 = BW)</label><input id="gW" type="number" inputmode="decimal" value="0"></div>'+
+        '<div><label class="fld">Reps</label><input id="gR" type="number" inputmode="numeric" value="0"></div>'+
+        '<div><label class="fld">Hold (s)</label><input id="gH" type="number" inputmode="numeric" value="0"></div>'+
+        '<div><label class="fld">Kind</label><select id="gK"><option value="work">Work</option><option value="ramp">Ramp</option></select></div>'+
+        '</div><button class="btn" data-act="addset">Record set</button></div></div>';
+
+  const days=gymDays().slice(0,10);
+  h+='<div class="panel"><div class="ph"><h2>Recent sessions</h2></div><div class="pb tight">';
+  if(!days.length) h+='<div class="pb"><div class="note">No sets recorded.</div></div>';
+  days.forEach(d=>{
+    const es=obsOf("set").filter(e=>dayKey(e.ts)===d).sort((a,b)=>a.ts-b.ts);
+    const g={};
+    es.forEach(e=>{ (g[e.ex]=g[e.ex]||[]).push(e); });
+    h+='<div class="ev"><div class="when">'+dayLabel(d).slice(0,6)+'</div><div class="what">'+
+       Object.keys(g).map(k=>'<b>'+esc(EX[k]?EX[k].n:k)+'</b> '+
+         g[k].map(e=>'<span class="'+(e.setkind==="ramp"?"c-muted":"")+'">'+figureOf(e)+'</span>').join(" · ")).join("<br>")+
+       '</div></div>';
+  });
+  h+='</div></div>';
+  return h;
+}
+
+/* ── JOINT ── */
+function viewJoint(){
+  const p=P(), today=jointOnDay(todayK()), latest=jointLatest(), pr=p.probe.pistol;
+  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">Regime · anchored probe</span><h2>Pistol squat protocol</h2></div>'+
+        '<span class="sp reg">regime</span></div><div class="pb">'+
+        '<div class="note"><b>Depth</b> '+esc(pr.depth_ref)+'<br><b>Tempo</b> '+esc(pr.tempo)+
+        '<br><b>Reps</b> '+pr.reps+(pr.film?' · filmed':'')+'</div>'+
+        '<div class="note" style="margin-top:9px">'+esc(pr.note)+'</div>'+
+        '<div class="row" style="margin-top:11px">'+
+          '<button class="btn sm" data-act="probe" data-side="L">Passed left</button>'+
+          '<button class="btn sm" data-act="probe" data-side="R">Passed right</button>'+
+          '<button class="btn sm ghost" data-act="probefail" data-side="L">Failed left</button>'+
+          '<button class="btn sm ghost" data-act="probefail" data-side="R">Failed right</button>'+
+        '</div></div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span><h2>Score joints</h2></div>'+
+     '<span class="sp obs">observation</span></div><div class="pb"><div class="jgrid">';
+  slots().forEach(x=>{
+    const k=slotKey(x.r,x.s), t=today[k], l=latest[k];
+    const anchored = p.coverage[x.r]==="pistol";
+    h+='<div class="jslot"><div class="jn"><span>'+esc(slotName(x.r,x.s))+'</span>'+
+       '<span class="jv '+(t?(t.value>=p.joint.theta_stop?"c-red":t.value>p.joint.theta_advance?"c-orange":"c-green"):"c-muted")+'">'+
+       (t?t.value:"—")+'</span></div>'+
+       '<div class="anchor">'+(anchored?"anchored · pistol":"unanchored")+
+         (!t&&l?' · last '+l.value+' '+ago(l.ts):'')+'</div>'+
+       '<div class="scale">'+
+       Array.from({length:p.joint.scale_max+1},(_,i)=>
+         '<button data-act="joint" data-r="'+x.r+'" data-s="'+(x.s||"")+'" data-v="'+i+'" class="'+
+         (t&&t.value===i?"on":"")+(i>=p.joint.theta_stop?" over":"")+'">'+i+'</button>').join("")+
+       '</div></div>';
+  });
+  h+='</div><div class="note" style="margin-top:12px">The scale runs past the bound on purpose. A score that cannot reach '+
+     p.joint.theta_stop+' is a claim that cannot fail.</div></div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Boundary</span><h2>What these probes reach</h2></div></div>'+
+     '<div class="pb tight"><table><thead><tr><th>Region under load</th><th>Probe</th><th>Standing</th></tr></thead><tbody>';
+  COVERAGE_ROWS.forEach(r=>{
+    const c = r.kind==="anchored"?"c-green":r.kind==="unanchored"?"c-amber":"c-muted";
+    h+='<tr><td>'+esc(r.what)+'<br><span class="c-muted" style="font-weight:500;font-size:11.5px">'+esc(r.how)+'</span></td>'+
+       '<td class="'+c+'">'+(r.probe?esc(r.probe):"none")+'</td>'+
+       '<td class="'+c+'">'+(r.kind==="none"?"UNKNOWN":r.kind)+'</td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+
+  h+='<div class="panel"><div class="ph"><h2>Knee trajectory</h2></div><div class="pb tight">';
+  ["L","R"].forEach(side=>{
+    const tr=jointTrack("knee",side).slice(-14);
+    h+='<div class="ev"><div class="when">Knee '+side+'</div><div class="what mono">'+
+       (tr.length?tr.map(m=>m.value).join(" → "):"no scores")+'</div></div>';
+  });
+  h+='</div></div>';
+  return h;
+}
+
+/* ── REGIME ── */
+function viewRegime(){
+  const cur=currentRegime(), p=P();
+  const hist=events("regime").sort(newest);
+  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">In force</span><h2>Regime '+shortD(cur&&cur.digest)+'</h2></div>'+
+        '<span class="sp reg">regime</span></div><div class="pb">';
+  h+= cur
+    ? '<div class="note">Written '+dayLabel(dayKey(cur.effective_from))+' '+clock(cur.effective_from)+
+      '. Governs observations recorded from that moment forward and no earlier ones.'+
+      (cur.reason?'<br><b>Reason</b> '+esc(cur.reason):'')+'</div>'
+    : '<div class="note">Nothing in force. Record the parameters below to put a regime in force from now.</div>';
+  h+='<div class="fldrow" style="margin-top:12px">'+
+     '<div><label class="fld">Advance at ≤</label><input id="tAdv" type="number" value="'+p.joint.theta_advance+'"></div>'+
+     '<div><label class="fld">Close at ≥</label><input id="tStop" type="number" value="'+p.joint.theta_stop+'"></div>'+
+     '<div><label class="fld">Scale max</label><input id="tMax" type="number" value="'+p.joint.scale_max+'"></div>'+
+     '<div><label class="fld">Min gap (h)</label><input id="tGap" type="number" value="'+p.frequency.min_gap_hours+'"></div>'+
+     '</div>'+
+     '<div class="fldrow">'+
+     Object.keys(GROUPS).map(g=>'<div><label class="fld">'+g+' cap</label>'+
+       '<input id="b_'+g+'" type="number" placeholder="from history" value="'+
+       (p.budgets[g]==null?"":p.budgets[g])+'"></div>').join("")+
+     '</div>'+
+     '<div class="note" style="margin:-4px 0 12px">Leave a cap blank to let it come from the largest dose that resolved. '+
+     'A number typed here overrides history and says so on the tile.</div>'+
+     '<div class="fldrow"><div style="grid-column:1/-1"><label class="fld">Target band</label><select id="tBand">'+
+       ZONES.filter(z=>z.group!=="STRUCTURE").map(z=>'<option value="'+esc(z.name)+'"'+
+         ((p.bands[z.name]==="target")?" selected":"")+'>'+esc(z.name)+'</option>').join("")+
+     '</select></div></div>'+
+     '<label class="fld">Why this change</label><textarea id="tReason" placeholder="What made the old parameter wrong. This is recorded, not evaluated."></textarea>'+
+     '<div class="row" style="margin-top:11px"><button class="btn" data-act="amend">Record amendment</button>'+
+     '<button class="btn ghost" data-act="clearcaps">Blank the caps</button></div>'+
+     '<div class="note" style="margin-top:10px">An amendment takes force from the moment it is written. '+
+     'It cannot govern anything already recorded, and there is no field here that would let it.</div>'+
+     '</div></div>';
+
+  h+='<div class="panel"><div class="ph"><h2>Amendment history</h2></div><div class="pb tight">';
+  h+= hist.length ? hist.map(r=>
+    '<div class="ev"><div class="when">'+dayLabel(dayKey(r.effective_from)).slice(0,6)+'</div>'+
+    '<div class="what"><b class="mono">'+shortD(r.digest)+'</b>'+(r.parent?' <span class="c-muted mono">← '+shortD(r.parent)+'</span>':' <span class="c-muted">first</span>')+
+    '<br><span class="c-muted">advance ≤'+r.params.joint.theta_advance+' · close ≥'+r.params.joint.theta_stop+
+    ' · gap '+r.params.frequency.min_gap_hours+'h</span>'+
+    (r.reason?'<br>'+esc(r.reason):'')+'</div></div>').join("")
+    : '<div class="pb"><div class="note">No regime recorded.</div></div>';
+  h+='</div></div>';
+  return h;
+}
+
+/* ── LOG ── */
+function evHTML(e){
+  let what="";
+  if(e.species==="observation"){
+    if(e.kind==="joint") what='<span class="sp obs">obs</span> <b>'+esc(slotName(e.region,e.side))+'</b> scored <b>'+e.value+'</b>'+
+      (e.procedure?' <span class="c-muted">· '+esc(e.procedure)+'</span>':'');
+    else if(e.kind==="set") what='<span class="sp obs">obs</span> <b>'+esc(EX[e.ex]?EX[e.ex].n:e.ex)+'</b> '+figureOf(e)+
+      ' <span class="c-muted">'+esc(e.setkind||"")+'</span>';
+    else if(e.kind==="run") what='<span class="sp obs">obs</span> <b>'+esc(e.band)+'</b> '+comma(e.steps)+' steps'+
+      (e.secs?' · '+e.secs+'s':'')+' <span class="c-muted">'+esc(e.date||"")+' · '+esc(e.source||"manual")+'</span>';
+    else if(e.kind==="probe") what='<span class="sp obs">obs</span> <b>Pistol '+esc(e.side)+'</b> '+
+      (e.passed?'<span class="c-green">passed</span>':'<span class="c-red">failed</span>')+' <span class="c-muted">anchored</span>';
+    else what='<span class="sp obs">obs</span> '+esc(e.kind);
+  }else if(e.species==="regime"){
+    what='<span class="sp reg">regime</span> <b class="mono">'+shortD(e.digest)+'</b> in force'+(e.reason?' <span class="c-muted">· '+esc(e.reason)+'</span>':'');
+  }else if(e.species==="decision"){
+    what='<span class="sp dec">decision</span> <b>'+esc(e.outcome.toUpperCase())+'</b> — '+esc(e.scope)+
+      '<br><span class="mono">regime '+shortD(e.regime_digest)+' · evidence '+e.evidence.map(esc).join(", ")+
+      (Object.keys(e.external_inputs||{}).length?' · external '+esc(canon(e.external_inputs)):' · pure')+'</span>';
+  }
+  return '<div class="ev"><div class="when">'+dayLabel(dayKey(e.ts)).slice(0,6)+'<br>'+clock(e.ts)+'</div>'+
+         '<div class="what">'+what+'</div></div>';
+}
+function viewLog(){
+  const evs=L.events.slice().reverse();
+  let h='<div class="panel"><div class="ph"><div><h2>'+L.events.length+' events</h2></div>'+
+        '<div class="row"><button class="btn sm ghost" data-act="export">Export JSON</button>'+
+        '<button class="btn sm ghost" data-act="importJson">Import</button>'+
+        '<input type="file" id="jsonInput" accept=".json" class="hide"></div></div>'+
+        '<div class="pb"><div class="note">Append-only. Nothing here is edited or removed — a correction is a new entry, '+
+        'and the entry it corrects stays where it is. Export regularly: this lives in browser storage and a cache wipe takes it.</div></div></div>';
+  h+='<div class="panel"><div class="pb tight">'+
+     (evs.length?evs.slice(0,300).map(evHTML).join(""):'<div class="pb"><div class="note">Empty.</div></div>')+
+     '</div></div>';
+  return h;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   12. ACTIONS
+   ══════════════════════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+const numOf = id => { const el=$(id); return el?Number(el.value)||0:0; };
+
+document.addEventListener("click", async ev=>{
+  const t = ev.target.closest("[data-tab],[data-act]");
+  if(!t) return;
+  if(t.dataset.tab){ TAB=t.dataset.tab; render(); return; }
+  const a=t.dataset.act;
+
+  if(a==="joint"){
+    append({species:"observation", kind:"joint", region:t.dataset.r,
+            side:t.dataset.s||null, value:Number(t.dataset.v),
+            procedure: P().coverage[t.dataset.r]==="pistol" ? "pistol-anchored" : "unanchored"});
+    render();
+  }
+  else if(a==="probe" || a==="probefail"){
+    append({species:"observation", kind:"probe", probe:"pistol", side:t.dataset.side,
+            passed: a==="probe", protocol: canon(P().probe.pistol)});
+    flash={k:"ok", m:"Pistol "+t.dataset.side+" recorded. Score the knee now, not later."};
+    render();
+  }
+  else if(a==="addset"){
+    const id=$("gEx").value;
+    append({species:"observation", kind:"set", ex:id, w:numOf("gW"),
+            reps:numOf("gR"), hold:numOf("gH"), setkind:$("gK").value});
+    render();
+  }
+  else if(a==="addrun"){
+    const steps=numOf("rSteps");
+    if(steps<1){ flash={k:"warn",m:"An exposure with no steps records nothing. Enter a step count."}; render(); return; }
+    append({species:"observation", kind:"run", band:$("rBand").value, steps,
+            secs:numOf("rSecs"), date:$("rDate").value||todayK(), source:"manual"});
+    render();
+  }
+  else if(a==="decide"){
+    const pr=proposals()[Number(t.dataset.i)];
+    if(!pr) return;
+    const r=recordDecision(pr.scope, pr.outcome, pr.evidence, {});
+    flash = r.ok ? {k:"ok", m:"Decision recorded under regime "+shortD(currentRegime().digest)+"."}
+                 : {k:"stop", m:r.why};
+    render();
+  }
+  else if(a==="amend"){
+    const p=JSON.parse(JSON.stringify(P()));
+    p.joint.theta_advance=numOf("tAdv");
+    p.joint.theta_stop=numOf("tStop");
+    p.joint.scale_max=numOf("tMax");
+    p.frequency.min_gap_hours=numOf("tGap");
+    Object.keys(GROUPS).forEach(g=>{
+      const el=$("b_"+g), raw=el?String(el.value).trim():"";
+      p.budgets[g] = raw==="" ? null : Number(raw);
+    });
+    const tb=$("tBand").value;
+    ZONES.forEach(z=>{ if(z.group!=="STRUCTURE") p.bands[z.name] = z.name===tb ? "target" : "checkpoint"; });
+    const r=await amendRegime(p, $("tReason").value.trim());
+    flash = r.ok ? {k:"ok", m:"Regime "+shortD(r.ev.digest)+" in force from now."}
+                 : {k:"warn", m:r.why};
+    render();
+  }
+  else if(a==="clearcaps"){
+    Object.keys(GROUPS).forEach(g=>{ const el=$("b_"+g); if(el) el.value=""; });
+    /* The form is blanked. Nothing is in force until the amendment is recorded. */
+  }
+  else if(a==="export"){
+    const blob=new Blob([JSON.stringify(L,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob), link=document.createElement("a");
+    link.href=url; link.download="ledger-"+todayK()+".json"; link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+  }
+  else if(a==="importJson"){ $("jsonInput").click(); }
+});
+
+/* file inputs */
+document.addEventListener("change", async ev=>{
+  if(ev.target.id==="jsonInput"){
+    const f=ev.target.files[0]; if(!f) return;
+    try{
+      const p=JSON.parse(await f.text());
+      if(!p || !Array.isArray(p.events)) throw 0;
+      const have=new Set(L.events.map(e=>e.id));
+      let added=0;
+      p.events.forEach(e=>{ if(!have.has(e.id)){ L.events.push(e); added++; } });
+      L.events.sort((a,b)=>a.ts-b.ts);
+      saveLedger();
+      flash={k:"ok", m:"Merged "+added+" entries. Nothing was replaced."};
+    }catch(e){ flash={k:"stop", m:"That file is not a ledger export."}; }
+    render();
+  }
+  if(ev.target.id==="fileInput"){ await handleFiles(ev.target.files); }
+});
+
+async function handleFiles(files){
+  const report=[]; let total=0;
+  for(const f of files){
+    if(!/\.csv$/i.test(f.name)){ report.push(f.name+": skipped, not a CSV"); continue; }
+    try{
+      const rows=parseCSV(await f.text());
+      const r=[];
+      const samples=samplesFromRows(rows, r);
+      const n=ingest(samples, todayK());
+      total+=n;
+      report.push(f.name+": "+r.join(", ")+" → "+n+" band entries");
+    }catch(e){ report.push(f.name+": could not be read"); }
+  }
+  flash={k: total?"ok":"warn", m: total? total+" exposures recorded from import." : "No exposures found in those files."};
+  render();
+  const el=$("importNote"); if(el) el.innerHTML=report.map(esc).join("<br>");
+}
+
+/* drag and drop */
+document.addEventListener("dragover", e=>{ if($("drop")){ e.preventDefault(); $("drop").classList.add("over"); } });
+document.addEventListener("dragleave", e=>{ if($("drop")) $("drop").classList.remove("over"); });
+document.addEventListener("drop", async e=>{
+  if(!$("drop")) return;
+  e.preventDefault(); $("drop").classList.remove("over");
+  if(e.dataTransfer && e.dataTransfer.files.length) await handleFiles(e.dataTransfer.files);
+});
+document.addEventListener("click", e=>{ if(e.target.closest("#drop")) $("fileInput").click(); });
+
+/* ══════════════════════════════════════════════════════════════════════
+   13. BOOT
+   ══════════════════════════════════════════════════════════════════════ */
+(async function boot(){
+  loadLedger();
+  if(!events("regime").length){
+    /* The seed is written as a regime event like any other, so the first
+       decision has something to cite and the ledger has no unrecorded rules. */
+    const digest=await sha256(canon(SEED));
+    L.events.push({id:"00001-seed", ts:Date.now(), species:"regime", digest,
+      parent:null, effective_from:Date.now(),
+      reason:"Seed. Written before the first observation it governs.",
+      params:JSON.parse(JSON.stringify(SEED))});
+    saveLedger();
+  }
+  render();
+})();
+</script>
+</body>
+</html>
