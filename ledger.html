@@ -37,7 +37,7 @@ body{
 /* tabs */
 .tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tab{flex:0 0 auto;padding:8px 14px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.03);
+.tab{flex:0 0 auto;padding:8px 11px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.03);
      color:var(--muted);font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
 .tab:hover{color:#fff;border-color:rgba(255,255,255,.3)}
 .tab.on{background:rgba(168,85,247,.18);border-color:var(--purple);color:#fff}
@@ -83,18 +83,24 @@ button{font-family:inherit}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 input,select,textarea{
   background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:8px;color:#fff;
-  font-family:inherit;font-size:14px;font-weight:700;padding:8px 10px}
+  font-family:inherit;font-size:14px;font-weight:700;padding:8px 10px;
+  width:100%;max-width:100%;min-width:0}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--purple)}
 textarea{width:100%;min-height:72px;font-weight:500;resize:vertical;line-height:1.5}
 label.fld{display:block;font-size:10px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
-.fldrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:11px}
+.fldrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:10px;margin-bottom:11px}
+.chk{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--fg);margin-bottom:9px}
+.chk input{width:16px;height:16px;flex:0 0 auto}
+.fldrow > div{min-width:0}
 
 /* tables */
-table{width:100%;border-collapse:collapse}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
 th{font-size:10px;text-transform:uppercase;letter-spacing:.09em;padding:9px 10px;text-align:left;
    border-bottom:1px solid var(--line);font-weight:900;color:var(--muted)}
 td{font-size:13px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.07);font-weight:700;
-   font-variant-numeric:tabular-nums}
+   font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+th.w-sm,td.w-sm{width:22%}
+th.w-xs,td.w-xs{width:16%}
 tr:last-child td{border-bottom:0}
 td.num{text-align:right}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:baseline}
@@ -116,7 +122,7 @@ td.num{text-align:right}
 .jslot .jn .jv{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums}
 .jslot .anchor{font-size:10px;color:var(--muted);margin-top:2px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
 .scale{display:flex;gap:5px;margin-top:9px}
-.scale button{flex:1;padding:7px 0;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.04);
+.scale button{flex:1 1 0;min-width:0;padding:8px 0;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.04);
               color:var(--muted);font-weight:900;font-size:13px;cursor:pointer}
 .scale button:hover{border-color:rgba(255,255,255,.35);color:#fff}
 .scale button.on{background:rgba(168,85,247,.25);border-color:var(--purple);color:#fff}
@@ -169,8 +175,9 @@ td.num{text-align:right}
     <div class="stamp" id="stamp"></div>
   </div>
   <div class="tagline">
-    One record. Observations are what was seen, the regime is what was decided in advance,
-    and a decision is the regime applied to observations it was written before.
+    This does not tell you what to do. It records what you did and whether it settled,
+    against a setting it was already running under — so the setting cannot move after
+    the result arrives. Going up without clearing is recorded, never refused.
   </div>
 
   <div class="tabs" id="tabs"></div>
@@ -262,7 +269,14 @@ const slotName = (r,s) => (REGIONS.find(x=>x.id===r)||{n:r}).n + (s ? " "+s : ""
 const SEED = {
   joint:{
     scale_max:5,          // the scale runs past the bound on purpose
-    theta_advance:1,      // J <= this: exposure may advance
+    /* 0, not 1. This is not a stricter safety threshold — it is a different
+       kind of statement. "Small enough" is a tolerance budget, and a budget
+       gets spent: a slot can sit at 1 forever, and 1-forever is a different
+       object from 1-then-0. One is accumulating, the other resolved, and
+       from inside they look identical unless the return is demanded.
+       You cannot measure a system still absorbing an input, so a reading
+       taken while a slot is still at 1 is an offset from an unknown state. */
+    theta_advance:0,      // J <= this: the slot came back
     theta_hold:2,         // J <= this: hold, no advance
     theta_stop:3          // J >= this: close the exposure class
   },
@@ -281,6 +295,11 @@ const SEED = {
      the app says so rather than inventing one. */
   budgets:{ STRUCTURE:null, CRUISE:null, RUN:null, SPEED:null },
   frequency:{ min_gap_hours:48, speed_exposures_per_week:1 },
+  /* Different accounts break different tissue, so they do not share a
+     sentinel. Speed is force per contact — knee. The substrate is count at
+     low force, which is how bone accumulates and what the tibia went under
+     in February — foot and ankle. */
+  gates:{ SPEED:["knee"], RUN:["knee"], CRUISE:["foot","ankle"], STRUCTURE:["foot","ankle"] },
   bands:{},   // filled from ZONES below at seed time
   coverage:{
     knee:"pistol", ankle:null, foot:null, hip:null, back:null, shoulder:null,
@@ -386,7 +405,11 @@ const GROUPS = {
   RUN:      {icon:"▪", color:"orange", desc:"Performance running", kind:"run"},
   SPEED:    {icon:"▪", color:"red",    desc:"Neuromuscular",       kind:"speed"}
 };
-const SPIKE_MPS = 32/3.6;
+/* Imported samples above this are treated as vehicles, not running. It sits
+   just above the fastest rung on the ladder — set any lower and the top bands
+   become unreachable by import while still being listed, which is a dead rung
+   pretending to be a live one. Manual entry does not pass through here. */
+const SPIKE_MPS = 12.5;
 const ZONES = [
   {group:"STRUCTURE", name:"Power Walk", pace:"7:00–8:00 /km",   lo:2.083, hi:2.381, color:"green"},
   {group:"STRUCTURE", name:"Brisk Walk", pace:"8:00–9:00 /km",   lo:1.852, hi:2.083, color:"green"},
@@ -396,16 +419,16 @@ const ZONES = [
   {group:"STRUCTURE", name:"Ambient",    pace:"12:00+ /km",      lo:0.0,   hi:1.389, color:"green"},
   {group:"CRUISE",    name:"Easy",       pace:"6:00–7:00 /km",   lo:2.381, hi:2.778, color:"teal"},
   {group:"CRUISE",    name:"Continuous", pace:"5:30–6:00 /km",   lo:2.778, hi:3.030, color:"teal"},
-  {group:"RUN",   name:"5:15–5:30", pace:"/km", lo:3.030, hi:3.175, color:"orange"},
-  {group:"RUN",   name:"5:00–5:15", pace:"/km", lo:3.175, hi:3.333, color:"orange"},
-  {group:"RUN",   name:"4:45–5:00", pace:"/km", lo:3.333, hi:3.509, color:"orange"},
-  {group:"RUN",   name:"4:30–4:45", pace:"/km", lo:3.509, hi:3.704, color:"orange"},
-  {group:"RUN",   name:"4:15–4:30", pace:"/km", lo:3.704, hi:3.922, color:"orange"},
-  {group:"RUN",   name:"4:00–4:15", pace:"/km", lo:3.922, hi:4.167, color:"orange"},
-  {group:"RUN",   name:"3:45–4:00", pace:"/km", lo:4.167, hi:4.444, color:"orange"},
-  {group:"RUN",   name:"3:30–3:45", pace:"/km", lo:4.444, hi:4.762, color:"orange"},
-  {group:"RUN",   name:"3:15–3:30", pace:"/km", lo:4.762, hi:5.128, color:"orange"},
-  {group:"RUN",   name:"3:00–3:15", pace:"/km", lo:5.128, hi:5.556, color:"orange"},
+  /* Down to 3:00/km the step is 30 seconds. A 15-second step out here is a
+     smaller change in force per contact than the same 15 seconds costs near
+     sprint, so the fine grain buys nothing and only lengthens the ladder. */
+  {group:"RUN",   name:"5:00–5:30", pace:"/km", lo:3.030, hi:3.333, color:"orange"},
+  {group:"RUN",   name:"4:30–5:00", pace:"/km", lo:3.333, hi:3.704, color:"orange"},
+  {group:"RUN",   name:"4:00–4:30", pace:"/km", lo:3.704, hi:4.167, color:"orange"},
+  {group:"RUN",   name:"3:30–4:00", pace:"/km", lo:4.167, hi:4.762, color:"orange"},
+  {group:"RUN",   name:"3:00–3:30", pace:"/km", lo:4.762, hi:5.556, color:"orange"},
+  /* Below 3:00 the step tightens to 15 seconds, where each one is a real
+     jump in force per contact. */
   {group:"SPEED", name:"2:45–3:00", pace:"/km", lo:5.556, hi:6.061, color:"red"},
   {group:"SPEED", name:"2:30–2:45", pace:"/km", lo:6.061, hi:6.667, color:"red"},
   {group:"SPEED", name:"2:15–2:30", pace:"/km", lo:6.667, hi:7.407, color:"red"},
@@ -416,9 +439,17 @@ const ZONES = [
 /* Seed band classification: only the raced demand is a target. Everything
    below it is passed through. See §6 of the canon section — a checkpoint is
    probed once and left; a target is repeated until it stops responding. */
+/* The substrate: running at 5:00/km and slower. Target class, not checkpoint
+   — it is repeated until it stops responding, not probed once and passed
+   through. Its job is not aerobic (the bike buys that without contacts) and
+   not marathon preparation. An edge with nothing under it has no capacity to
+   absorb what it costs, and the edge is too rare to build its own substrate.
+   The terminal state is 5 minutes a day absorbed with no residue. */
+const SUBSTRATE = ["5:00–5:30","Continuous","Easy"];
 ZONES.forEach(z=>{
-  SEED.bands[z.name] = z.group==="STRUCTURE" ? "maintenance"
-                     : z.name==="2:15–2:30"  ? "target"
+  SEED.bands[z.name] = z.group==="STRUCTURE"      ? "maintenance"
+                     : z.name==="2:15–2:30"       ? "target"
+                     : SUBSTRATE.includes(z.name) ? "target"
                      : "checkpoint";
 });
 function assignZone(v){
@@ -484,6 +515,61 @@ function clearanceAfter(ts, region, side){
   return hit ? {hours:(hit.ts-ts)/3600000, at:hit} : null;
 }
 
+/* ── DAYS TO CLEAR ────────────────────────────────────────────────────
+   The only instrument here that reports a RATE rather than a STATE.
+
+   Everything else answers "where is it now". This answers "how fast did
+   the same dose resolve", and the trend across repetitions is the signal
+   — no single value means anything.
+
+     falling  → absorbing faster, the ceiling is rising
+     rising   → accumulating, and it is visible BEFORE any slot crosses
+                a threshold, which is the only early warning in the system
+
+   It only works if the definition of clear holds still. If theta_advance
+   moves mid-series you cannot tell whether the body changed or the ruler
+   did — the same scale drift an anchored probe exists to prevent. That
+   is the reason the threshold is a regime parameter and amendments are
+   dated, and it is the whole reason, not honesty.
+
+   Aborted exposures are excluded. Something was taken that is not
+   accounted for, so the interval has no defined dose.
+   ─────────────────────────────────────────────────────────────────── */
+function clearanceSeries(regions){
+  const rs = regions && regions.length ? regions : ["knee"];
+  const out = [];
+  obsOf("run").filter(o=>!o.aborted).sort((a,b)=>a.ts-b.ts).forEach(o=>{
+    let worstHrs = 0, complete = true;
+    rs.forEach(rg=>{
+      const R = REGIONS.find(x=>x.id===rg);
+      const sides = R && R.bi ? ["L","R"] : [null];
+      sides.forEach(sd=>{
+        const c = clearanceAfter(o.ts, rg, sd);
+        if(!c) complete = false; else worstHrs = Math.max(worstHrs, c.hours);
+      });
+    });
+    out.push({ id:o.id, ts:o.ts, day:o.date||dayKey(o.ts), band:o.band,
+               group:groupOfZone(o.band), steps:o.steps||0,
+               days: complete ? worstHrs/24 : null, open:!complete });
+  });
+  return out;
+}
+/* Trend over the resolved entries for one band: earlier half vs later half.
+   Two points is not a trend and the function says so rather than drawing a
+   line through noise. */
+function clearanceTrend(bandName, regions){
+  const s = clearanceSeries(regions).filter(e=>e.band===bandName && e.days!=null);
+  if(s.length < 4) return {n:s.length, verdict:"not enough resolved exposures"};
+  const h = Math.floor(s.length/2);
+  const mean = a => a.reduce((t,x)=>t+x.days,0)/a.length;
+  const a = mean(s.slice(0,h)), b = mean(s.slice(-h));
+  const d = b - a;
+  return { n:s.length, first:a, last:b, delta:d,
+           verdict: Math.abs(d) < 0.25 ? "flat"
+                  : d < 0 ? "clearing faster — ceiling rising"
+                          : "clearing slower — accumulating" };
+}
+
 /* worst current reading and which threshold band it sits in */
 function jointStatus(){
   const got=jointLatest(), all=slots();
@@ -534,10 +620,14 @@ function dailyDose(group){
   obsOf("run").forEach(o=>{
     if(groupOfZone(o.band)!==group) return;
     const d=o.date||dayKey(o.ts);
-    out[d]=out[d]||{steps:0, ids:[], last:0};
+    out[d]=out[d]||{steps:0, ids:[], last:0, aborted:false};
     out[d].steps+=(o.steps||0);
     out[d].ids.push(o.id);
     out[d].last=Math.max(out[d].last,o.ts);
+    /* An aborted exposure voids the day rather than merely not counting.
+       Something was taken that is not accounted for, so the day has no
+       defined dose — and a day with no defined dose cannot prove a ceiling. */
+    if(o.aborted) out[d].aborted=true;
   });
   return out;
 }
@@ -548,6 +638,7 @@ function resolvedDoses(group){
   const days=Object.keys(doses).sort();
   const out=[];
   days.forEach((d,i)=>{
+    if(doses[d].aborted) return;                           // dose undefined, proves nothing
     const from=Math.max(doses[d].last, endOfDay(d));
     const to = i+1<days.length ? endOfDay(days[i+1]) - DAY_MS : Date.now();
     if(to<=from) return;                                   // next exposure came first
@@ -857,7 +948,7 @@ function budgetTiles(){
   }).join("")+'</div>';
 }
 function provenTable(){
-  let h='<table><thead><tr><th>Account</th><th class="num">Ceiling</th><th>Where it came from</th></tr></thead><tbody>';
+  let h='<table><thead><tr><th class="w-sm">Account</th><th class="num w-xs">Ceiling</th><th>Where it came from</th></tr></thead><tbody>';
   Object.keys(GROUPS).forEach(g=>{
     const c=ceilingOf(g), all=resolvedDoses(g);
     let src;
@@ -870,6 +961,32 @@ function provenTable(){
        '<td>'+src+'</td></tr>';
   });
   return h+'</tbody></table>';
+}
+function clearanceTable(){
+  const p=P(), gates=(p.gates||{});
+  const bands=[...new Set(obsOf("run").filter(o=>!o.aborted).map(o=>o.band))];
+  if(!bands.length) return '<div class="note">No exposures recorded. Nothing to time yet.</div>';
+  let h='<table><thead><tr><th class="w-sm">Band</th><th class="num w-xs">Last</th>'+
+        '<th class="num w-xs">n</th><th>Trend</th></tr></thead><tbody>';
+  bands.forEach(b=>{
+    const g=groupOfZone(b), regions=gates[g]||["knee"];
+    const s=clearanceSeries(regions).filter(e=>e.band===b);
+    const done=s.filter(e=>e.days!=null);
+    const last=done.length?done[done.length-1].days:null;
+    const open=s.filter(e=>e.open).length;
+    const t=clearanceTrend(b,regions);
+    const cls = t.verdict.indexOf("faster")>=0 ? "c-green"
+              : t.verdict.indexOf("slower")>=0 ? "c-orange" : "c-muted";
+    h+='<tr><td>'+esc(b)+' <span class="c-muted">· '+regions.join("/")+'</span></td>'+
+       '<td class="num '+(last==null?"c-muted":"")+'">'+(last==null?"—":last.toFixed(1)+"d")+'</td>'+
+       '<td class="num">'+done.length+(open?'<span class="c-muted">+'+open+'</span>':'')+'</td>'+
+       '<td class="'+cls+'">'+esc(t.verdict)+
+       (t.delta!=null?' <span class="c-muted">('+(t.delta>0?"+":"")+t.delta.toFixed(1)+'d)</span>':'')+'</td></tr>';
+  });
+  return h+'</tbody></table>'+
+    '<div class="note">Gating slots differ by account — speed is force per contact and reads at the knee; '+
+    'the substrate is count at low force, which is how bone accumulates, and reads at foot and ankle. '+
+    'A count shown as <b>n+k</b> means k exposures have not cleared yet and are still open.</div>';
 }
 function propHTML(pr,i){
   const reg=currentRegime();
@@ -937,6 +1054,15 @@ function viewRun(){
      P().joint.theta_advance+' or under, and nothing in that window reached '+P().joint.theta_stop+'. '+
      'A window with no joint scores in it proves nothing — an unread dose is not a cleared one.</div></div></div>';
 
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Derived</span><h2>Days to clear</h2></div>'+
+     '<span class="sp der">derived</span></div><div class="pb tight">'+clearanceTable()+'</div>'+
+     '<div class="pb"><div class="note">The only reading here that reports a <b>rate</b> rather than a state. '+
+     'Everything else says where a slot is now; this says how fast the same dose resolved. '+
+     'Falling means it is being absorbed faster and the ceiling is rising. Rising means accumulation, '+
+     'and it shows before any slot crosses a threshold — the only early warning in the system.<br><br>'+
+     'It reads nothing unless the definition of clear holds still. If the threshold moves mid-series you '+
+     'cannot tell whether the body changed or the ruler did.</div></div></div>';
+
   h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span><h2>Record an exposure</h2></div>'+
      '<span class="sp obs">observation</span></div><div class="pb">'+
      '<div class="fldrow">'+
@@ -945,7 +1071,15 @@ function viewRun(){
        '<div><label class="fld">Steps</label><input id="rSteps" type="number" inputmode="numeric" value="0"></div>'+
        '<div><label class="fld">Seconds</label><input id="rSecs" type="number" inputmode="numeric" value="0"></div>'+
        '<div><label class="fld">Date</label><input id="rDate" type="date" value="'+todayK()+'"></div>'+
+       '<div><label class="fld">Impact rate (bw/s)</label><input id="rILR" type="number" inputmode="decimal" value=""></div>'+
      '</div>'+
+     '<label class="chk"><input id="rAbort" type="checkbox"> Aborted — propulsion degraded before the dose ended</label>'+
+     '<div class="small c-muted">A step at 2:11 is not a step at 2:34. Impact rate is the closest '+
+       'device-measured stand-in for what a contact costs, so a count of steps alone prices them equal '+
+       'when they are not. Recorded per exposure; not yet used to derive anything.<br><br>'+
+       'An aborted exposure voids the day rather than going unrecorded. Something was taken that is '+
+       'not accounted for, so no ceiling can rest on it — and a record holding only the clean days '+
+       'is a clean record of a dirty history.</div>'+
      '<button class="btn" data-act="addrun">Record exposure</button></div></div>';
 
   h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span><h2>Import device data</h2></div></div>'+
@@ -956,7 +1090,7 @@ function viewRun(){
 
   h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Regime</span><h2>Band ladder</h2></div>'+
      '<span class="sp reg">regime</span></div><div class="pb tight"><table><thead><tr>'+
-     '<th>Band</th><th>Class</th><th class="num">Exposures</th><th class="num">Last</th></tr></thead><tbody>';
+     '<th>Band</th><th class="w-sm">Class</th><th class="num w-xs">Reps</th><th class="num w-xs">Last</th></tr></thead><tbody>';
   ZONES.forEach(z=>{
     const cls=p.bands[z.name]||"checkpoint", ex=bandExposures(z.name);
     const last=ex.length?ex[ex.length-1]:null;
@@ -1036,7 +1170,7 @@ function viewJoint(){
      p.joint.theta_stop+' is a claim that cannot fail.</div></div></div>';
 
   h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Boundary</span><h2>What these probes reach</h2></div></div>'+
-     '<div class="pb tight"><table><thead><tr><th>Region under load</th><th>Probe</th><th>Standing</th></tr></thead><tbody>';
+     '<div class="pb tight"><table><thead><tr><th>Region under load</th><th class="w-sm">Probe</th><th class="w-sm">Standing</th></tr></thead><tbody>';
   COVERAGE_ROWS.forEach(r=>{
     const c = r.kind==="anchored"?"c-green":r.kind==="unanchored"?"c-amber":"c-muted";
     h+='<tr><td>'+esc(r.what)+'<br><span class="c-muted" style="font-weight:500;font-size:11.5px">'+esc(r.how)+'</span></td>'+
@@ -1172,8 +1306,11 @@ document.addEventListener("click", async ev=>{
   else if(a==="addrun"){
     const steps=numOf("rSteps");
     if(steps<1){ flash={k:"warn",m:"An exposure with no steps records nothing. Enter a step count."}; render(); return; }
+    const ilr=numOf("rILR"), ab=$("rAbort") && $("rAbort").checked;
     append({species:"observation", kind:"run", band:$("rBand").value, steps,
-            secs:numOf("rSecs"), date:$("rDate").value||todayK(), source:"manual"});
+            secs:numOf("rSecs"), date:$("rDate").value||todayK(),
+            ilr: ilr>0 ? ilr : null, aborted: !!ab, source:"manual"});
+    if(ab) flash={k:"warn", m:"Aborted exposure recorded. That day is void — it cannot prove a ceiling."};
     render();
   }
   else if(a==="decide"){
