@@ -399,6 +399,15 @@ const EX = {
 };
 const SPLITS = {push:"Push", pull:"Pull", legs:"Legs"};
 
+/* Cardio is non-running cardiovascular work. A run may produce cardiovascular
+   effect; it is never credited here. The two domains do not exchange. Cardio
+   observations carry kind:"cardio" and are therefore invisible to obsOf("run"),
+   to assignZone, to the step budgets and to the clearance instrument. That
+   separation is structural, not a display rule. */
+const CARDIO = {
+  bike:{n:"Bike", unit:"kJ"}
+};
+
 const GROUPS = {
   STRUCTURE:{icon:"▪", color:"green",  desc:"Foundation",          kind:"walk"},
   CRUISE:   {icon:"▪", color:"teal",   desc:"Comfortable running", kind:"cruise"},
@@ -452,6 +461,18 @@ ZONES.forEach(z=>{
                      : SUBSTRATE.includes(z.name) ? "target"
                      : "checkpoint";
 });
+/* Base and Edge for running are read off the regime's band classification,
+   not stored. Base = target bands inside the substrate. Edge = target bands
+   above it. Nothing is written; if the regime changes, this changes with it. */
+function runBaseEdge(){
+  const b = P().bands || {};
+  const t = Object.keys(b).filter(n => b[n]==="target");
+  return {
+    base: t.filter(n =>  SUBSTRATE.includes(n)),
+    edge: t.filter(n => !SUBSTRATE.includes(n))
+  };
+}
+
 function assignZone(v){
   if(!isFinite(v) || v<=0 || v>=SPIKE_MPS) return null;
   for(const z of ZONES){ if(v>=z.lo && v<z.hi) return z.name; }
@@ -666,6 +687,16 @@ function ceilingOf(group){
   const pv=provenDose(group);
   if(pv) return {steps:pv.steps, source:"proven", ev:pv};
   return {steps:null, source:"unset", ev:null};
+}
+
+/* cardio — never reads run observations, and run never reads these */
+const cardioOf = (mod,ck) => obsOf("cardio")
+  .filter(e => (!mod || e.modality===mod) && (!ck || e.cardiokind===ck))
+  .sort(newest);
+function cardioToday(mod){
+  const k=todayK();
+  const es=cardioOf(mod,"easy").filter(e=>dayKey(e.ts)===k);
+  return {bouts:es.length, mins:es.reduce((a,e)=>a+(e.mins||0),0)};
 }
 
 /* gym */
@@ -910,8 +941,10 @@ function ingest(samples, fallbackDate){
    11. RENDER
    ══════════════════════════════════════════════════════════════════════ */
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const TABS = [["today","Today"],["run","Run"],["gym","Gym"],["joint","Joint"],["regime","Regime"],["log","Ledger"]];
+const TABS = [["today","Today"],["running","Running"],["strength","Strength"],
+              ["cardio","Cardio"],["joint","Joint"],["regime","Regime"],["log","Ledger"]];
 let TAB = "today";
+let SEL = null;   /* selected exercise on the Strength tab; navigation only */
 let flash = null;
 
 function render(){
@@ -923,7 +956,8 @@ function render(){
   let html = "";
   if(storeErr) html += '<div class="banner stop">'+esc(storeErr)+'</div>';
   if(flash)    html += '<div class="banner '+flash.k+'">'+esc(flash.m)+'</div>';
-  html += ({today:viewToday, run:viewRun, gym:viewGym, joint:viewJoint, regime:viewRegime, log:viewLog}[TAB])();
+  html += ({today:viewToday, running:viewRunning, strength:viewStrength,
+            cardio:viewCardio, joint:viewJoint, regime:viewRegime, log:viewLog}[TAB])();
   v.innerHTML = html;
   flash = null;
 }
@@ -1043,9 +1077,31 @@ function viewToday(){
 }
 
 /* ── RUN ── */
-function viewRun(){
-  const p=P();
-  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">Derived</span><h2>Step budgets today</h2></div></div>'+
+function viewRunning(){
+  const p=P(), be=runBaseEdge();
+  const bandLine = ns => ns.length
+    ? ns.map(n=>'<b>'+esc(n)+'</b>').join(" · ")
+    : '<span class="c-muted">none classified</span>';
+
+  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">Derived from regime</span>'+
+        '<h2>Running — Base and Edge</h2></div><span class="sp der">derived</span></div>'+
+        '<div class="pb tight">'+
+        '<div class="ev"><div class="when">BASE</div><div class="what">'+bandLine(be.base)+
+        '<br><span class="c-muted">Cheap, repeatable. Held until it stops behaving differently.</span></div></div>'+
+        '<div class="ev"><div class="when">EDGE</div><div class="what">'+bandLine(be.edge)+
+        '<br><span class="c-muted">The perturbation. Short, near-maximal, sized to recur.</span></div></div>'+
+        '</div><div class="pb"><div class="note">Not stored. Read off the band classification in the '+
+        'regime in force, so amending the regime moves these and nothing has to be migrated.</div></div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Governor</span><h2>Event-based</h2></div></div>'+
+     '<div class="pb tight">'+
+     '<div class="ev"><div class="when">FLAG</div><div class="what">A joint score appears &rarr; loading of that joint stops immediately.</div></div>'+
+     '<div class="ev"><div class="when">CLEAR</div><div class="what">Next-day probe clear &rarr; return to the loop.</div></div>'+
+     '<div class="ev"><div class="when">FLAGS</div><div class="what">Next-day probe still flags &rarr; rehab branch.</div></div>'+
+     '</div><div class="pb"><div class="note">No clearance duration is estimated. A clear probe admits '+
+     'tomorrow&rsquo;s exposure; it does not establish that every slow ledger resolved.</div></div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Derived</span><h2>Step budgets today</h2></div></div>'+
         '<div class="pb">'+budgetTiles()+'</div></div>';
 
   h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Derived from history</span><h2>Where each ceiling came from</h2></div>'+
@@ -1054,7 +1110,8 @@ function viewRun(){
      P().joint.theta_advance+' or under, and nothing in that window reached '+P().joint.theta_stop+'. '+
      'A window with no joint scores in it proves nothing — an unread dose is not a cleared one.</div></div></div>';
 
-  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Derived</span><h2>Days to clear</h2></div>'+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Analytical &middot; not governing</span>'+
+     '<h2>Days to clear</h2></div>'+
      '<span class="sp der">derived</span></div><div class="pb tight">'+clearanceTable()+'</div>'+
      '<div class="pb"><div class="note">The only reading here that reports a <b>rate</b> rather than a state. '+
      'Everything else says where a slot is now; this says how fast the same dose resolved. '+
@@ -1105,34 +1162,128 @@ function viewRun(){
 }
 
 /* ── GYM ── */
-function viewGym(){
-  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span><h2>Record a set</h2></div>'+
-        '<span class="sp obs">observation</span></div><div class="pb">'+
-        '<div class="fldrow">'+
-        '<div><label class="fld">Movement</label><select id="gEx">'+
-          Object.keys(SPLITS).map(s=>'<optgroup label="'+SPLITS[s]+'">'+
-            Object.keys(EX).filter(k=>EX[k].s===s).map(k=>'<option value="'+k+'">'+esc(EX[k].n)+'</option>').join("")+
-          '</optgroup>').join("")+'</select></div>'+
-        '<div><label class="fld">Load (kg, 0 = BW)</label><input id="gW" type="number" inputmode="decimal" value="0"></div>'+
-        '<div><label class="fld">Reps</label><input id="gR" type="number" inputmode="numeric" value="0"></div>'+
-        '<div><label class="fld">Hold (s)</label><input id="gH" type="number" inputmode="numeric" value="0"></div>'+
-        '<div><label class="fld">Kind</label><select id="gK"><option value="work">Work</option><option value="ramp">Ramp</option></select></div>'+
-        '</div><button class="btn" data-act="addset">Record set</button></div></div>';
+function exState(id){
+  const all = setsOf(id);
+  if(!all.length) return null;
+  const work = all.filter(e=>e.setkind!=="ramp");
+  const heavy = work.slice().sort((a,b)=>(b.w||0)-(a.w||0))[0] || null;
+  return {last:all[0], heavy, n:all.length, lastDay:dayKey(all[0].ts)};
+}
 
-  const days=gymDays().slice(0,10);
-  h+='<div class="panel"><div class="ph"><h2>Recent sessions</h2></div><div class="pb tight">';
+function viewStrength(){
+  if(SEL) return viewExercise(SEL);
+
+  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">Directory</span>'+
+        '<h2>Strength</h2></div></div><div class="pb"><div class="note">'+
+        'Open a movement to see its current state and record work. Base and Edge are how you read '+
+        'the numbers, not fields the ledger stores.</div></div></div>';
+
+  Object.keys(SPLITS).forEach(sp=>{
+    const ids = Object.keys(EX).filter(k=>EX[k].s===sp);
+    if(!ids.length) return;
+    const groups = {};
+    ids.forEach(k=>{ (groups[EX[k].g||"Other"] = groups[EX[k].g||"Other"] || []).push(k); });
+    h+='<div class="panel"><div class="ph"><h2>'+esc(SPLITS[sp])+'</h2></div><div class="pb tight">';
+    Object.keys(groups).forEach(g=>{
+      h+='<div class="ev"><div class="when">'+esc(g)+'</div><div class="what">';
+      h+=groups[g].map(k=>{
+        const st=exState(k);
+        const tail = st
+          ? '<span class="c-muted"> · '+esc(figureOf(st.last))+' · '+esc(st.lastDay)+'</span>'
+          : '<span class="c-muted"> · nothing recorded</span>';
+        return '<div><a href="#" data-act="openex" data-ex="'+k+'"><b>'+esc(EX[k].n)+'</b></a>'+tail+'</div>';
+      }).join("");
+      h+='</div></div>';
+    });
+    h+='</div></div>';
+  });
+  return h;
+}
+
+function viewExercise(id){
+  const m=EX[id]; if(!m){ SEL=null; return viewStrength(); }
+  const st=exState(id);
+
+  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">'+
+        esc(SPLITS[m.s]||"")+' &middot; '+esc(m.g||"")+'</span><h2>'+esc(m.n)+'</h2></div>'+
+        '<button class="btn sm" data-act="backstrength">All movements</button></div>'+
+        '<div class="pb tight">';
+  if(!st){
+    h+='<div class="note">Nothing recorded for this movement yet.</div>';
+  }else{
+    h+='<div class="ev"><div class="when">LAST</div><div class="what">'+esc(figureOf(st.last))+
+       ' <span class="c-muted">· '+esc(st.lastDay)+
+       (st.last.setkind==="ramp"?' · ramp':'')+'</span></div></div>';
+    if(st.heavy) h+='<div class="ev"><div class="when">HEAVIEST</div><div class="what">'+
+       esc(figureOf(st.heavy))+' <span class="c-muted">· '+esc(dayKey(st.heavy.ts))+'</span></div></div>';
+    h+='<div class="ev"><div class="when">ENTRIES</div><div class="what">'+st.n+'</div></div>';
+  }
+  h+='</div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span>'+
+     '<h2>Record a set</h2></div><span class="sp obs">observation</span></div><div class="pb">'+
+     '<div class="fldrow">'+
+     '<div><label class="fld">Load (kg, 0 = BW)</label><input id="gW" type="number" inputmode="decimal" value="0"></div>'+
+     '<div><label class="fld">Reps</label><input id="gR" type="number" inputmode="numeric" value="0"></div>'+
+     '<div><label class="fld">Hold (s)</label><input id="gH" type="number" inputmode="numeric" value="0"></div>'+
+     '<div><label class="fld">Kind</label><select id="gK"><option value="work">Work</option>'+
+     '<option value="ramp">Ramp</option></select></div>'+
+     '</div><button class="btn" data-act="addset" data-ex="'+esc(id)+'">Record set</button></div></div>';
+
+  const days=[...new Set(setsOf(id).map(e=>dayKey(e.ts)))].slice(0,14);
+  h+='<div class="panel"><div class="ph"><h2>History</h2></div><div class="pb tight">';
   if(!days.length) h+='<div class="pb"><div class="note">No sets recorded.</div></div>';
   days.forEach(d=>{
-    const es=obsOf("set").filter(e=>dayKey(e.ts)===d).sort((a,b)=>a.ts-b.ts);
-    const g={};
-    es.forEach(e=>{ (g[e.ex]=g[e.ex]||[]).push(e); });
+    const es=setsOf(id).filter(e=>dayKey(e.ts)===d).sort((a,b)=>a.ts-b.ts);
     h+='<div class="ev"><div class="when">'+dayLabel(d).slice(0,6)+'</div><div class="what">'+
-       Object.keys(g).map(k=>'<b>'+esc(EX[k]?EX[k].n:k)+'</b> '+
-         g[k].map(e=>'<span class="'+(e.setkind==="ramp"?"c-muted":"")+'">'+figureOf(e)+'</span>').join(" · ")).join("<br>")+
+       es.map(e=>'<span class="'+(e.setkind==="ramp"?"c-muted":"")+'">'+figureOf(e)+'</span>').join(" · ")+
        '</div></div>';
   });
-  h+='</div></div>';
-  return h;
+  return h+'</div></div>';
+}
+
+/* ── CARDIO ── */
+function viewCardio(){
+  const mod="bike", c=CARDIO[mod], t=cardioToday(mod);
+
+  let h='<div class="panel"><div class="ph"><div><span class="eyebrow">Domain</span>'+
+        '<h2>Cardio &mdash; '+esc(c.n)+'</h2></div></div><div class="pb"><div class="note">'+
+        'Non-running cardiovascular work. Running is never credited here and nothing recorded here '+
+        'reaches the step budgets, the bands, or the clearance instrument.</div></div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span>'+
+     '<h2>Base &mdash; easy work</h2></div><span class="sp obs">observation</span></div><div class="pb">'+
+     '<div class="note">Effort-led. May be several small bouts across the day. Heart rate is recorded '+
+     'because it is observable, not because it is the target.</div>'+
+     '<div class="fldrow">'+
+     '<div><label class="fld">Minutes</label><input id="cMins" type="number" inputmode="numeric" value="0"></div>'+
+     '<div><label class="fld">Avg HR (optional)</label><input id="cHR" type="number" inputmode="numeric" value=""></div>'+
+     '</div><button class="btn" data-act="addcardio">Record bout</button>'+
+     '<div class="note">Today: <b>'+t.bouts+'</b> bout'+(t.bouts===1?"":"s")+' · <b>'+t.mins+'</b> min.</div>'+
+     '</div></div>';
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span>'+
+     '<h2>Edge &mdash; probe</h2></div><span class="sp obs">observation</span></div><div class="pb">'+
+     '<div class="note">A bounded read, currently about two minutes hard. Record the work produced and '+
+     'the heart-rate response. No HR target is prescribed — the response is the reading, not the goal.</div>'+
+     '<div class="fldrow">'+
+     '<div><label class="fld">Seconds</label><input id="pSecs" type="number" inputmode="numeric" value="120"></div>'+
+     '<div><label class="fld">Work ('+esc(c.unit)+')</label><input id="pWork" type="number" inputmode="decimal" value=""></div>'+
+     '<div><label class="fld">Peak HR</label><input id="pHR" type="number" inputmode="numeric" value=""></div>'+
+     '</div><button class="btn" data-act="addprobe">Record probe</button></div></div>';
+
+  const es=cardioOf(mod).slice(0,20);
+  h+='<div class="panel"><div class="ph"><h2>Recent</h2></div><div class="pb tight">';
+  if(!es.length) h+='<div class="pb"><div class="note">Nothing recorded.</div></div>';
+  es.forEach(e=>{
+    const what = e.cardiokind==="probe"
+      ? '<b>Probe</b> '+(e.secs||0)+'s'+(e.work_kj!=null?' · '+e.work_kj+' '+esc(c.unit):'')+
+        (e.hr_peak!=null?' · peak '+e.hr_peak:'')
+      : '<b>Base</b> '+(e.mins||0)+' min'+(e.hr_avg!=null?' · avg '+e.hr_avg:'');
+    h+='<div class="ev"><div class="when">'+dayLabel(dayKey(e.ts)).slice(0,6)+'</div>'+
+       '<div class="what">'+what+'</div></div>';
+  });
+  return h+'</div></div>';
 }
 
 /* ── JOINT ── */
@@ -1282,7 +1433,7 @@ const numOf = id => { const el=$(id); return el?Number(el.value)||0:0; };
 document.addEventListener("click", async ev=>{
   const t = ev.target.closest("[data-tab],[data-act]");
   if(!t) return;
-  if(t.dataset.tab){ TAB=t.dataset.tab; render(); return; }
+  if(t.dataset.tab){ TAB=t.dataset.tab; SEL=null; render(); return; }
   const a=t.dataset.act;
 
   if(a==="joint"){
@@ -1297,10 +1448,29 @@ document.addEventListener("click", async ev=>{
     flash={k:"ok", m:"Pistol "+t.dataset.side+" recorded. Score the knee now, not later."};
     render();
   }
+  else if(a==="openex"){ ev.preventDefault(); SEL=t.dataset.ex; render(); }
+  else if(a==="backstrength"){ SEL=null; render(); }
   else if(a==="addset"){
-    const id=$("gEx").value;
+    const id=t.dataset.ex || SEL;
+    if(!id) return;
     append({species:"observation", kind:"set", ex:id, w:numOf("gW"),
             reps:numOf("gR"), hold:numOf("gH"), setkind:$("gK").value});
+    render();
+  }
+  else if(a==="addcardio"){
+    const mins=numOf("cMins");
+    if(mins<1){ flash={k:"warn",m:"A bout with no minutes records nothing."}; render(); return; }
+    const hr=numOf("cHR");
+    append({species:"observation", kind:"cardio", modality:"bike", cardiokind:"easy",
+            mins, hr_avg: hr>0 ? hr : null});
+    render();
+  }
+  else if(a==="addprobe"){
+    const secs=numOf("pSecs");
+    if(secs<1){ flash={k:"warn",m:"A probe with no duration records nothing."}; render(); return; }
+    const w=numOf("pWork"), hr=numOf("pHR");
+    append({species:"observation", kind:"cardio", modality:"bike", cardiokind:"probe",
+            secs, work_kj: w>0 ? w : null, hr_peak: hr>0 ? hr : null});
     render();
   }
   else if(a==="addrun"){
