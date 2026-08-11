@@ -63,22 +63,42 @@ button{background:none;border:0;cursor:pointer}
 
 /* ── exercise list ───────────────────────────────────── */
 .list{display:flex;flex-direction:column;gap:9px}
-.row{
-  background:var(--surf);border-radius:var(--r);border:1px solid var(--line);
-  padding:19px 18px;display:flex;align-items:center;gap:14px;text-align:left;width:100%;
+.row2{
+  background:var(--surf);border:1px solid var(--line);border-radius:var(--r);
+  display:flex;align-items:center;gap:12px;padding:14px 13px 14px 16px;
 }
-.row:active{background:var(--surf2)}
-.row .nm{flex:1;min-width:0;font-size:21px;font-weight:650;letter-spacing:-.02em;line-height:1.15}
-.row .sub{display:block;font-size:13px;font-weight:500;color:var(--mut);margin-top:3px;letter-spacing:.01em}
-.row .chev{color:var(--dim);font-size:20px}
-.stripe{width:4px;align-self:stretch;border-radius:3px;flex:none}
-.s-push{background:var(--push)} .s-pull{background:var(--pull)} .s-legs{background:var(--legs)}
+.rmain{flex:1;min-width:0;text-align:left;display:block}
+.rmain:active{opacity:.65}
+.rmain .nm{display:block;font-size:20px;font-weight:700;letter-spacing:-.022em;line-height:1.2}
+.rmain .grp{display:block;font-size:12.5px;font-weight:600;color:var(--mut);margin-top:2px}
+.rmain .pv{display:block;font-size:13.5px;font-weight:600;margin-top:8px;line-height:1.55;
+  color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rmain .pv i{font-style:normal;font-weight:750;letter-spacing:.02em}
+.rmain .pv .lb{color:#6f9df0} .rmain .pv .le{color:#d0796f}
+.rmain .pv .un{color:var(--mut);font-weight:600}
+.rmain .none{color:var(--dim);font-weight:600}
+.today{display:inline-block;margin-top:7px;font-size:11px;font-weight:750;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ok);background:rgba(46,163,107,.13);
+  border-radius:6px;padding:3px 7px}
+
+.racts{display:flex;flex-direction:column;gap:8px;flex:none;width:98px}
+.qb{border-radius:11px;padding:13px 0;font-size:14.5px;font-weight:800;letter-spacing:.05em;
+  color:#fff;text-align:center;transition:transform .07s ease,filter .07s ease}
+.qb:active{transform:scale(.95);filter:brightness(1.2)}
+.q-base{background:var(--push)}
+.q-edge{background:var(--pull)}
+.qb.off{background:transparent;border:1px dashed var(--line);color:var(--dim);font-weight:700}
 
 .ghost{
   width:100%;border:1px dashed var(--line);border-radius:var(--r);
   padding:16px;color:var(--mut);font-size:15px;font-weight:600;margin-top:12px;
 }
 .ghost:active{background:var(--surf)}
+
+/* compact rows reused inside the manage sheet */
+.row{background:var(--surf);border-radius:var(--r);border:1px solid var(--line);
+  padding:13px 14px;display:flex;align-items:center;gap:12px;width:100%;text-align:left}
+.row .nm{flex:1;min-width:0;font-size:17px;font-weight:650}
 
 /* ── exercise screen ─────────────────────────────────── */
 .exhd{text-align:center;flex:1;min-width:0}
@@ -360,7 +380,7 @@ function render(){
                 : SCREEN.v==="split" ? viewSplit(SCREEN.s)
                 : viewExercise(SCREEN.ex);
   if(SHEET) app.insertAdjacentHTML("beforeend", SHEET());
-  window.scrollTo(0, SCREEN.v==="ex" ? window.__sy||0 : 0);
+  window.scrollTo(0, window.__sy||0);
 }
 
 function viewHome(){
@@ -383,14 +403,27 @@ function viewSplit(s){
           '<button class="icon" data-a="manage" data-s="'+s+'" aria-label="Edit list">&#8943;</button></div>'+
           '<div class="wrap"><div class="list">';
   if(!ids.length) h += '<div class="empty">No movements here yet. Add one below.</div>';
+
   ids.forEach(id=>{
-    const m = EX[id], p = presetOf(id);
-    h += '<button class="row" data-a="ex" data-ex="'+id+'">'+
-         '<span class="stripe s-'+s+'"></span>'+
-         '<span class="nm">'+esc(m.n)+
-         '<span class="sub">'+(p ? figure(m,p.w,p.reps,p.hold).replace(/<\/?em>/g,"") : esc(m.g||""))+'</span></span>'+
-         '<span class="chev">&#8250;</span></button>';
+    const m = EX[id];
+    const pb = presetOf(id,"base"), pe = presetOf(id,"edge");
+    const n  = setsOf(id).filter(e=>dayKey(e.ts)===todayK()).length;
+    const fig = p => figure(m,p.w,p.reps,p.hold).replace(/<em>/g,'<span class="un">').replace(/<\/em>/g,'</span>');
+
+    h += '<div class="row2">'+
+         '<button class="rmain" data-a="ex" data-ex="'+id+'">'+
+           '<span class="nm">'+esc(m.n)+'</span>'+
+           (m.g?'<span class="grp">'+esc(m.g)+'</span>':'')+
+           '<span class="pv">'+(pb?'<i class="lb">Base</i> '+fig(pb):'<span class="none">No base preset</span>')+'</span>'+
+           '<span class="pv">'+(pe?'<i class="le">Edge</i> '+fig(pe):'<span class="none">No edge preset</span>')+'</span>'+
+           (n?'<span class="today">'+n+' today</span>':'')+
+         '</button>'+
+         '<div class="racts">'+
+           '<button class="qb q-base'+(pb?'':' off')+'" data-a="'+(pb?'base':'editpreset')+'" data-k="base" data-ex="'+id+'">Base</button>'+
+           '<button class="qb q-edge'+(pe?'':' off')+'" data-a="'+(pe?'edge':'editpreset')+'" data-k="edge" data-ex="'+id+'">Edge</button>'+
+         '</div></div>';
   });
+
   h += '</div><button class="ghost" data-a="newex" data-s="'+s+'">+ Add movement</button>';
   return h+'</div>';
 }
@@ -605,11 +638,11 @@ document.addEventListener("click", ev=>{
   const a = t.dataset.a;
 
   /* navigation */
-  if(a==="home"){ SCREEN={v:"home"}; SHOW_ALL=false; ARMED=null; return render(); }
-  if(a==="split"){ SCREEN={v:"split",s:t.dataset.s}; SHOW_ALL=false; ARMED=null; SHEET=null; return render(); }
+  if(a==="home"){ SCREEN={v:"home"}; window.__sy=0; SHOW_ALL=false; ARMED=null; return render(); }
+  if(a==="split"){ SCREEN={v:"split",s:t.dataset.s}; window.__sy=0; SHOW_ALL=false; ARMED=null; SHEET=null; return render(); }
   if(a==="ex"){ SCREEN={v:"ex",ex:t.dataset.ex}; SHOW_ALL=false; ARMED=null; window.__sy=0; return render(); }
   if(a==="close"){ return closeSheet(); }
-  if(a==="showall"){ SHOW_ALL=!SHOW_ALL; return render(); }
+  if(a==="showall"){ window.__sy=window.scrollY; SHOW_ALL=!SHOW_ALL; return render(); }
 
   /* the one that matters */
   if(a==="base" || a==="edge"){
@@ -668,7 +701,7 @@ document.addEventListener("click", ev=>{
   }
 
   /* void a mis-tap — recorded as a correction, never erased */
-  if(a==="armset"){ ARMED = ARMED===t.dataset.id ? null : t.dataset.id; return render(); }
+  if(a==="armset"){ window.__sy=window.scrollY; ARMED = ARMED===t.dataset.id ? null : t.dataset.id; return render(); }
   if(a==="voidset"){
     ev.stopPropagation();
     const id = t.dataset.id, e = L.events.find(x=>x.id===id);
