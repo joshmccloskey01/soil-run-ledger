@@ -118,6 +118,13 @@ button{background:none;border:0;cursor:pointer}
   font-weight:650;color:var(--mut);flex:none}
 .edit:active{background:var(--surf2)}
 
+.vars{display:flex;gap:8px;overflow-x:auto;padding:1px 0 4px;margin-bottom:16px;scrollbar-width:none}
+.vars::-webkit-scrollbar{display:none}
+.vchip{flex:none;padding:11px 15px;border-radius:11px;border:1px solid var(--line);
+  background:var(--surf);font-size:14.5px;font-weight:650;color:var(--mut);white-space:nowrap}
+.vchip[aria-pressed="true"]{background:var(--surf2);color:var(--tx);border-color:var(--dim)}
+.vtag{font-size:12px;font-weight:650;color:var(--dim);margin-left:8px}
+
 .acts{display:flex;flex-direction:column;gap:11px;margin-top:14px}
 .act{
   border-radius:15px;padding:17px 16px;text-align:center;color:#fff;
@@ -277,14 +284,16 @@ const obsOf  = k  => L.events.filter(e=>e.species==="observation" && e.kind===k)
    n=name  s=split  g=group  iso=isometric  bw=bodyweight
    ══════════════════════════════════════════════════════════════════ */
 const EX_SEED = {
-  pla:{n:"Planche progression",s:"push",g:"Skill strength",iso:1,bw:1},
+  pla:{n:"Planche progression",s:"push",g:"Skill strength",iso:1,bw:1,
+       vars:["Planche lean","Tuck planche","Advanced tuck planche","Planche"]},
   bp:{n:"Bench press",s:"push",g:"Press"},
   pu:{n:"Push-ups",s:"push",g:"Press",bw:1},
   sap:{n:"Standing single-arm press",s:"push",g:"Press"},
   blr:{n:"Banded lateral raise",s:"push",g:"Shoulders",bw:1},
   wlr:{n:"Weighted lateral raise",s:"push",g:"Shoulders"},
   ctp:{n:"Cable triceps pushdown",s:"push",g:"Arms"},
-  fle:{n:"Ring front lever",s:"pull",g:"Skill strength",iso:1,bw:1},
+  fle:{n:"Ring front lever",s:"pull",g:"Skill strength",iso:1,bw:1,
+       vars:["Tuck lever","Advanced tuck lever","Single-leg lever","Front lever"]},
   pc:{n:"Power clean",s:"pull",g:"Power"},
   sld:{n:"Straight-leg deadlift",s:"pull",g:"Hinge"},
   wpu:{n:"Neutral grip pull-up",s:"pull",g:"Vertical pull",bw:1},
@@ -296,13 +305,14 @@ const EX_SEED = {
   rap:{n:"Ring archer pull-up",s:"pull",g:"Vertical pull",bw:1,hidden:1},
   oap:{n:"One-arm pull-up",s:"pull",g:"Vertical pull",bw:1,hidden:1},
   bsq:{n:"Belt squat",s:"legs",g:"Squat"},
-  tsl:{n:"Trap bar single-leg DL",s:"legs",g:"Hinge"},
+  tsl:{n:"Trap bar single-leg DL",s:"legs",g:"Hinge",hidden:1},
   gbm:{n:"Glute bridge machine",s:"legs",g:"Hip"},
   ghr:{n:"Glute-ham raise",s:"legs",g:"Hip",bw:1},
   lex:{n:"Leg extension",s:"legs",g:"Knee"},
   lcu:{n:"Leg curl",s:"legs",g:"Knee"},
   cra:{n:"Standing calf raise",s:"legs",g:"Lower leg"},
-  tib:{n:"Tibialis raise",s:"legs",g:"Lower leg"},
+  tib:{n:"Banded tibialis raise",s:"legs",g:"Lower leg"},
+  bce:{n:"Banded calf extension",s:"legs",g:"Lower leg"},
   pis:{n:"Pistol squat (probe)",s:"legs",g:"Knee",bw:1}
 };
 const SPLITS = {push:"Push", pull:"Pull", legs:"Legs"};
@@ -326,21 +336,36 @@ const inSplit = s => Object.keys(EX)
    PRESETS — new append-only species. Latest per exercise is current.
    Nothing changes a preset except an explicit edit.
    ══════════════════════════════════════════════════════════════════ */
-function presetOf(id, kind){
-  kind = kind || "base";
-  const ps = events("preset").filter(e=>e.ex===id && (e.pkind||"base")===kind).sort((a,b)=>b.ts-a.ts);
-  return ps[0] || null;
+/* Progressions carry ordered levels. The level you are on is itself an
+   append-only setting, and presets are held per level. */
+function levels(id){ const m = EX[id]; return (m && m.vars) ? m.vars : []; }
+function curVar(id){
+  const lv = levels(id);
+  if(!lv.length) return "";
+  const e = events("exvar").filter(x=>x.ex===id).sort((a,b)=>b.ts-a.ts)[0];
+  return (e && lv.indexOf(e.v)>=0) ? e.v : lv[0];
 }
-function presetHistory(id, kind){
+function presetOf(id, kind, v){
   kind = kind || "base";
-  return events("preset").filter(e=>e.ex===id && (e.pkind||"base")===kind).sort((a,b)=>b.ts-a.ts);
+  v = (v===undefined) ? curVar(id) : v;
+  const ps = events("preset")
+    .filter(e=>e.ex===id && (e.pkind||"base")===kind && (e.v||"")===v)
+    .sort((a,b)=>b.ts-a.ts);
+  return ps[0] || null;
 }
 
 /* ══════════════════════════════════════════════════════════════════
    SETS — record shape identical to ledger.html.
    {species:"observation", kind:"set", ex, w, reps, hold, setkind}
    ══════════════════════════════════════════════════════════════════ */
-const setsOf = id => obsOf("set").filter(e=>e.ex===id).sort((a,b)=>b.ts-a.ts);
+/* A voided set is retracted by a later event, never removed from the record. */
+function voidedIds(){
+  const out = new Set();
+  events("void").forEach(e=>out.add(e.ref));
+  return out;
+}
+let VOIDED = new Set();
+const setsOf = id => obsOf("set").filter(e=>e.ex===id && !VOIDED.has(e.id)).sort((a,b)=>b.ts-a.ts);
 
 function figure(m, w, reps, hold){
   const load = (Number(w)===0 && m.bw) ? "BW" : num(w)+"<em> lb</em>";
@@ -382,6 +407,7 @@ let ARMED = null;
 
 function render(){
   EX = library();
+  VOIDED = voidedIds();
   const app = document.getElementById("app");
   app.innerHTML = SCREEN.v==="home" ? viewHome()
                 : SCREEN.v==="split" ? viewSplit(SCREEN.s)
@@ -420,7 +446,7 @@ function viewSplit(s){
     h += '<div class="row2">'+
          '<button class="rmain" data-a="ex" data-ex="'+id+'">'+
            '<span class="nm">'+esc(m.n)+'</span>'+
-           (m.g?'<span class="grp">'+esc(m.g)+'</span>':'')+
+           '<span class="grp">'+esc(curVar(id) || m.g || "")+'</span>'+
            '<span class="pv">'+(pb?'<i class="lb">Base</i> '+fig(pb):'<span class="none">No base preset</span>')+'</span>'+
            '<span class="pv">'+(pe?'<i class="le">Edge</i> '+fig(pe):'<span class="none">No edge preset</span>')+'</span>'+
            (n?'<span class="today">'+n+' today</span>':'')+
@@ -448,6 +474,14 @@ function viewExercise(id){
           '<div class="exhd"><b>'+esc(m.n)+'</b>'+(m.g?'<span>'+esc(m.g)+'</span>':'')+'</div>'+
           '<button class="icon" data-a="exmenu" data-ex="'+id+'" aria-label="Options">&#8943;</button></div>'+
           '<div class="wrap">';
+
+  /* progression levels */
+  const lv = levels(id), cv = curVar(id);
+  if(lv.length){
+    h += '<div class="plab">Level</div><div class="vars">'+
+      lv.map(v=>'<button class="vchip" data-a="setvar" data-ex="'+id+'" data-v="'+esc(v)+'" aria-pressed="'+
+        (v===cv)+'">'+esc(v)+'</button>').join("")+'</div>';
+  }
 
   /* current preset */
   h += '<div class="plab">Current preset</div>'+
@@ -496,7 +530,8 @@ function setRow(m,e){
   return '<div class="set '+esc(k)+(armed?" on":"")+'" data-a="armset" data-id="'+e.id+'">'+
          '<span class="tick">&#10003;</span>'+
          '<span class="tm">'+clock(e.ts)+'</span>'+
-         '<span class="fg">'+figure(m,e.w,e.reps,e.hold)+'</span>'+
+         '<span class="fg">'+figure(m,e.w,e.reps,e.hold)+
+           (e.v?' <span class="vtag">'+esc(e.v)+'</span>':'')+'</span>'+
          (k!=="work"?'<span class="tag">'+esc(k)+'</span>':'')+
          (armed?'<button class="del" data-a="voidset" data-id="'+e.id+'">Void</button>':'')+
          '</div>';
@@ -521,8 +556,10 @@ function sheetSet(){
   const plain = p => figure(m,p.w,p.reps,p.hold).replace(/<\/?em>/g,"");
   const pb = presetOf(F.ex,"base"), pe = presetOf(F.ex,"edge");
 
+  const cv = curVar(F.ex);
   let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
-          '<div class="grab"></div><h3>'+(F.mode==="preset"?"Preset":"Record a set")+' &mdash; '+esc(m.n)+'</h3>';
+          '<div class="grab"></div><h3>'+(F.mode==="preset"?"Preset":"Record a set")+' &mdash; '+
+          esc(cv || m.n)+'</h3>';
 
   if(F.mode==="preset"){
     h += '<div class="hint">Set the numbers, then save them as base or edge. Nothing else changes a preset.</div>'+
@@ -549,7 +586,7 @@ function sheetSet(){
        '<button class="save c-pull" data-a="savepreset" data-k="edge">Save edge preset</button>'+
        '<button class="sub2" data-a="close">Done</button>';
 
-  const ph = events("preset").filter(e=>e.ex===F.ex).sort((a,b)=>b.ts-a.ts);
+  const ph = events("preset").filter(e=>e.ex===F.ex && (e.v||"")===cv).sort((a,b)=>b.ts-a.ts);
   if(ph.length){
     h += '<div class="sect"><h2>Preset history</h2></div>';
     ph.slice(0,8).forEach(e=>{
@@ -608,6 +645,11 @@ document.addEventListener("click", ev=>{
   if(a==="split"){ SCREEN={v:"split",s:t.dataset.s}; window.__sy=0; SHOW_ALL=false; ARMED=null; SHEET=null; return render(); }
   if(a==="ex"){ SCREEN={v:"ex",ex:t.dataset.ex}; SHOW_ALL=false; ARMED=null; window.__sy=0; return render(); }
   if(a==="close"){ return closeSheet(); }
+  if(a==="setvar"){
+    window.__sy = window.scrollY;
+    append({species:"exvar", ex:t.dataset.ex, v:t.dataset.v});
+    return render();
+  }
   if(a==="showall"){ window.__sy=window.scrollY; SHOW_ALL=!SHOW_ALL; return render(); }
 
   /* the one that matters */
@@ -615,7 +657,7 @@ document.addEventListener("click", ev=>{
     const id = t.dataset.ex, p = presetOf(id, a);
     if(!p) return;
     window.__sy = window.scrollY;
-    const ok = append({species:"observation", kind:"set", ex:id,
+    const ok = append({species:"observation", kind:"set", ex:id, v:curVar(id),
                        w:p.w, reps:p.reps||0, hold:p.hold||0,
                        setkind:(a==="edge"?"edge":"work"), unit:"lb"});
     if(ok){ buzz(a==="edge"?24:14); toast(a.toUpperCase()+" recorded · "+clock(ok.ts)); render(); }
@@ -650,7 +692,7 @@ document.addEventListener("click", ev=>{
     const m = EX[F.ex];
     if(!m.iso && !F.reps){ return toast("Reps is 0. Nothing to record.", true); }
     if(m.iso && !F.hold){ return toast("Hold is 0. Nothing to record.", true); }
-    const ok = append({species:"observation", kind:"set", ex:F.ex,
+    const ok = append({species:"observation", kind:"set", ex:F.ex, v:curVar(F.ex),
                        w:F.w||0, reps:F.reps||0, hold:F.hold||0, setkind:F.setkind||"work", unit:"lb"});
     if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); }
     return closeSheet();
@@ -660,7 +702,7 @@ document.addEventListener("click", ev=>{
     const m = EX[F.ex], k = t.dataset.k || "base";
     if(!m.iso && !F.reps){ return toast("Reps is 0. Set a value.", true); }
     if(m.iso && !F.hold){ return toast("Hold is 0. Set a value.", true); }
-    append({species:"preset", ex:F.ex, pkind:k,
+    append({species:"preset", ex:F.ex, pkind:k, v:curVar(F.ex),
             w:F.w||0, reps:F.reps||0, hold:F.hold||0, unit:"lb"});
     buzz(12);
     toast((k==="edge"?"Edge":"Base")+" preset saved · "+F.w+" lb");
@@ -672,9 +714,9 @@ document.addEventListener("click", ev=>{
   if(a==="armset"){ window.__sy=window.scrollY; ARMED = ARMED===t.dataset.id ? null : t.dataset.id; return render(); }
   if(a==="voidset"){
     ev.stopPropagation();
-    const id = t.dataset.id, e = L.events.find(x=>x.id===id);
-    if(e){ e.voided = true; L.events = L.events.filter(x=>x.id!==id); saveLedger(); }
-    ARMED=null; toast("Set removed"); return render();
+    window.__sy = window.scrollY;
+    append({species:"void", ref:t.dataset.id});
+    ARMED=null; toast("Set retracted · still in the record"); return render();
   }
 
   /* library management */
