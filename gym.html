@@ -260,12 +260,15 @@ const EX_SEED = {
   fle:{n:"Ring front lever",s:"pull",g:"Skill strength",iso:1,bw:1},
   pc:{n:"Power clean",s:"pull",g:"Power"},
   sld:{n:"Straight-leg deadlift",s:"pull",g:"Hinge"},
-  wpu:{n:"Weighted neutral pull-up",s:"pull",g:"Vertical pull",bw:1},
-  rap:{n:"Ring archer pull-up",s:"pull",g:"Vertical pull",bw:1},
-  oap:{n:"One-arm pull-up",s:"pull",g:"Vertical pull",bw:1},
+  wpu:{n:"Neutral grip pull-up",s:"pull",g:"Vertical pull",bw:1},
+  rpu:{n:"Rings pull-up",s:"pull",g:"Vertical pull",bw:1},
   hcr:{n:"Standing high cable row",s:"pull",g:"Horizontal pull"},
   idc:{n:"Incline dumbbell curl",s:"pull",g:"Arms"},
   fw:{n:"Forearm work",s:"pull",g:"Forearms"},
+  /* off the list — history kept, restorable from the Pull ⋯ menu */
+  rap:{n:"Ring archer pull-up",s:"pull",g:"Vertical pull",bw:1,hidden:1},
+  oap:{n:"One-arm pull-up",s:"pull",g:"Vertical pull",bw:1,hidden:1},
+  bsq:{n:"Belt squat",s:"legs",g:"Squat"},
   tsl:{n:"Trap bar single-leg DL",s:"legs",g:"Hinge"},
   gbm:{n:"Glute bridge machine",s:"legs",g:"Hip"},
   ghr:{n:"Glute-ham raise",s:"legs",g:"Hip",bw:1},
@@ -538,7 +541,18 @@ function sheetManage(){
          '<button class="edit" data-a="mv" data-ex="'+id+'" data-d="1" '+(i===ids.length-1?"disabled style=opacity:.3":"")+' aria-label="Down">&#8595;</button>'+
          '</div>';
   });
-  return h+'</div></div>';
+  h += '</div>';
+  const gone = Object.keys(EX).filter(k=>EX[k].s===F.s && EX[k].hidden);
+  if(gone.length){
+    h += '<div class="sect"><h2>Removed</h2></div><div class="list">';
+    gone.forEach(id=>{
+      h += '<div class="row" style="padding:13px 14px;opacity:.62">'+
+           '<span class="nm" style="font-size:17px">'+esc(EX[id].n)+'</span>'+
+           '<button class="edit" data-a="showex" data-ex="'+id+'">Restore</button></div>';
+    });
+    h += '</div>';
+  }
+  return h+'</div>';
 }
 
 function sheetExMenu(){
@@ -683,6 +697,12 @@ document.addEventListener("click", ev=>{
     toast(F.ex?"Saved":"Added");
     SCREEN = {v:"split", s:F.s||"push"};
     return closeSheet();
+  }
+  if(a==="showex"){
+    const m = EX[t.dataset.ex];
+    append({species:"exdef", ex:t.dataset.ex, def:Object.assign({}, m, {hidden:0})});
+    toast("Restored");
+    EX = library(); return render();
   }
   if(a==="hideex"){
     const m = EX[F.ex];
