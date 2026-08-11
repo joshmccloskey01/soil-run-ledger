@@ -205,7 +205,14 @@ button{background:none;border:0;cursor:pointer}
   color:var(--mut);margin-top:8px;border:1px solid var(--line)}
 .sub2:active{background:var(--surf2)}
 .danger{color:#c9564c}
-.hint{font-size:13px;color:var(--dim);line-height:1.5;margin:-6px 0 16px}
+.hint{font-size:13px;color:var(--dim);line-height:1.5;margin:-6px 0 14px}
+.nowline{display:flex;gap:18px;flex-wrap:wrap;background:var(--bg);border:1px solid var(--line);
+  border-radius:12px;padding:12px 14px;margin-bottom:18px;font-size:14.5px;font-weight:650}
+.nowline i{font-style:normal;font-weight:750;font-size:11px;letter-spacing:.11em;
+  text-transform:uppercase;margin-right:7px}
+.nowline .lb{color:#6f9df0} .nowline .le{color:#d0796f}
+.set .tag.tb{color:#6f9df0;margin-left:0}
+.set .tag.te{color:#d0796f;margin-left:0}
 
 /* ── toast ───────────────────────────────────────────── */
 #toast{
@@ -511,90 +518,49 @@ function stepper(key,label,unit,step){
 
 function sheetSet(){
   const m = EX[F.ex];
-  const colour = F.mode==="preset" ? (F.pkind==="edge"?"c-pull":"c-push")
-               : (F.setkind==="edge"?"c-pull":"c-push");
-  const kn = F.pkind==="edge" ? "Edge" : "Base";
+  const plain = p => figure(m,p.w,p.reps,p.hold).replace(/<\/?em>/g,"");
+  const pb = presetOf(F.ex,"base"), pe = presetOf(F.ex,"edge");
+
   let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
-          '<div class="grab"></div><h3>'+(F.mode==="preset"?kn+" preset":"Record a set")+' &mdash; '+esc(m.n)+'</h3>';
-  if(F.mode==="preset") h += '<div class="hint">This is what '+kn.toUpperCase()+' records from now on. It changes only here.</div>';
+          '<div class="grab"></div><h3>'+(F.mode==="preset"?"Preset":"Record a set")+' &mdash; '+esc(m.n)+'</h3>';
+
+  if(F.mode==="preset"){
+    h += '<div class="hint">Set the numbers, then save them as base or edge. Nothing else changes a preset.</div>'+
+         '<div class="nowline">'+
+           '<span><i class="lb">Base</i> '+(pb?plain(pb):'&mdash;')+'</span>'+
+           '<span><i class="le">Edge</i> '+(pe?plain(pe):'&mdash;')+'</span>'+
+         '</div>';
+  }
+
   h += stepper("w", m.bw?"Load (lb &middot; 0 = bodyweight)":"Load (lb)","lb",5);
   h += m.iso ? stepper("hold","Hold","s",5) : stepper("reps","Reps","",1);
+
   if(F.mode==="set"){
     h += '<div class="fld"><label>Kind</label><div class="segs">'+
          ["work","edge","ramp"].map(v=>'<button class="seg" data-a="kind" data-v="'+v+'" aria-pressed="'+
            ((F.setkind||"work")===v)+'">'+v[0].toUpperCase()+v.slice(1)+'</button>').join("")+
-         '</div></div>';
+         '</div></div>'+
+         '<button class="save '+(F.setkind==="edge"?"c-pull":"c-push")+'" data-a="saveset">Record set</button>';
+    return h+'</div>';
   }
-  h += '<button class="save '+colour+'" data-a="'+(F.mode==="preset"?"savepreset":"saveset")+'">'+
-       (F.mode==="preset"?"Save "+kn.toLowerCase()+" preset":"Record set")+'</button>';
-  if(F.mode==="preset"){
-    const ph = presetHistory(F.ex, F.pkind);
-    if(ph.length){
-      h += '<div class="sect"><h2>Preset history</h2></div>';
-      ph.slice(0,6).forEach(e=>{
-        h += '<div class="set"><span class="fg">'+figure(m,e.w,e.reps,e.hold)+'</span>'+
-             '<span class="tm">'+esc(dayLabel(dayKey(e.ts)))+'</span></div>';
-      });
-    }
-  }
-  return h+'</div>';
-}
 
-function sheetExDef(){
-  const isNew = !F.ex;
-  let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
-          '<div class="grab"></div><h3>'+(isNew?"New movement":"Edit movement")+'</h3>'+
-          '<div class="fld"><label>Name</label><input class="tin" id="f_n" value="'+esc(F.n||"")+'" placeholder="e.g. Ring dip"></div>'+
-          '<div class="fld"><label>Group</label><input class="tin" id="f_g" value="'+esc(F.g||"")+'" placeholder="optional"></div>'+
-          '<div class="fld"><label>Category</label><div class="segs">'+
-          ["push","pull","legs"].map(s=>'<button class="seg" data-a="cat" data-v="'+s+'" aria-pressed="'+(F.s===s)+'">'+SPLITS[s]+'</button>').join("")+
-          '</div></div>'+
-          '<div class="fld"><label>Measured in</label><div class="segs">'+
-          '<button class="seg" data-a="iso" data-v="0" aria-pressed="'+(!F.iso)+'">Reps</button>'+
-          '<button class="seg" data-a="iso" data-v="1" aria-pressed="'+(!!F.iso)+'">Hold (s)</button>'+
-          '</div></div>'+
-          '<div class="fld"><label>Load</label><div class="segs">'+
-          '<button class="seg" data-a="bw" data-v="0" aria-pressed="'+(!F.bw)+'">Weighted</button>'+
-          '<button class="seg" data-a="bw" data-v="1" aria-pressed="'+(!!F.bw)+'">Bodyweight</button>'+
-          '</div></div>'+
-          '<button class="save c-'+(F.s||"push")+'" data-a="savedef">'+(isNew?"Add movement":"Save")+'</button>';
-  if(!isNew) h += '<button class="sub2 danger" data-a="hideex">Remove from list</button>';
-  return h+'</div>';
-}
+  /* two saves, one dial */
+  h += '<button class="save c-push" data-a="savepreset" data-k="base">Save base preset</button>'+
+       '<button class="save c-pull" data-a="savepreset" data-k="edge">Save edge preset</button>'+
+       '<button class="sub2" data-a="close">Done</button>';
 
-function sheetManage(){
-  const ids = inSplit(F.s);
-  let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
-          '<div class="grab"></div><h3>'+SPLITS[F.s]+' list</h3>'+
-          '<div class="hint">Reorder with the arrows. Tap a name to edit it.</div><div class="list">';
-  ids.forEach((id,i)=>{
-    h += '<div class="row" style="padding:13px 14px">'+
-         '<span class="nm" style="font-size:17px" data-a="editdef" data-ex="'+id+'">'+esc(EX[id].n)+'</span>'+
-         '<button class="edit" data-a="mv" data-ex="'+id+'" data-d="-1" '+(i===0?"disabled style=opacity:.3":"")+' aria-label="Up">&#8593;</button>'+
-         '<button class="edit" data-a="mv" data-ex="'+id+'" data-d="1" '+(i===ids.length-1?"disabled style=opacity:.3":"")+' aria-label="Down">&#8595;</button>'+
-         '</div>';
-  });
-  h += '</div>';
-  const gone = Object.keys(EX).filter(k=>EX[k].s===F.s && EX[k].hidden);
-  if(gone.length){
-    h += '<div class="sect"><h2>Removed</h2></div><div class="list">';
-    gone.forEach(id=>{
-      h += '<div class="row" style="padding:13px 14px;opacity:.62">'+
-           '<span class="nm" style="font-size:17px">'+esc(EX[id].n)+'</span>'+
-           '<button class="edit" data-a="showex" data-ex="'+id+'">Restore</button></div>';
+  const ph = events("preset").filter(e=>e.ex===F.ex).sort((a,b)=>b.ts-a.ts);
+  if(ph.length){
+    h += '<div class="sect"><h2>Preset history</h2></div>';
+    ph.slice(0,8).forEach(e=>{
+      const k = e.pkind||"base";
+      h += '<div class="set '+(k==="edge"?"edge":"work")+'">'+
+           '<span class="tag '+(k==="edge"?"te":"tb")+'">'+k+'</span>'+
+           '<span class="fg">'+figure(m,e.w,e.reps,e.hold)+'</span>'+
+           '<span class="tm" style="margin-left:auto;width:auto">'+esc(dayLabel(dayKey(e.ts)))+'</span></div>';
     });
-    h += '</div>';
   }
   return h+'</div>';
-}
-
-function sheetExMenu(){
-  return '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
-    '<div class="grab"></div><h3>'+esc(EX[F.ex].n)+'</h3>'+
-    '<button class="sub2" data-a="editpreset" data-k="base" data-ex="'+F.ex+'">Edit base preset</button>'+
-    '<button class="sub2" data-a="editpreset" data-k="edge" data-ex="'+F.ex+'">Edit edge preset</button>'+
-    '<button class="sub2" data-a="editdef" data-ex="'+F.ex+'">Edit movement</button>'+
-    '</div>';
 }
 
 function sheetSettings(){
@@ -691,13 +657,15 @@ document.addEventListener("click", ev=>{
   }
   if(a==="savepreset"){
     readFields();
-    const m = EX[F.ex];
+    const m = EX[F.ex], k = t.dataset.k || "base";
     if(!m.iso && !F.reps){ return toast("Reps is 0. Set a value.", true); }
     if(m.iso && !F.hold){ return toast("Hold is 0. Set a value.", true); }
-    append({species:"preset", ex:F.ex, pkind:F.pkind||"base",
+    append({species:"preset", ex:F.ex, pkind:k,
             w:F.w||0, reps:F.reps||0, hold:F.hold||0, unit:"lb"});
-    toast((F.pkind==="edge"?"Edge":"Base")+" preset saved");
-    return closeSheet();
+    buzz(12);
+    toast((k==="edge"?"Edge":"Base")+" preset saved · "+F.w+" lb");
+    F.pkind = k;
+    return render();
   }
 
   /* void a mis-tap — recorded as a correction, never erased */
