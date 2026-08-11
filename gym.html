@@ -81,33 +81,61 @@ button{background:none;border:0;cursor:pointer}
 .ghost:active{background:var(--surf)}
 
 /* ── exercise screen ─────────────────────────────────── */
+.exhd{text-align:center;flex:1;min-width:0}
+.exhd b{display:block;font-size:19px;font-weight:800;letter-spacing:.01em;text-transform:uppercase;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.exhd span{display:block;font-size:12.5px;color:var(--mut);font-weight:600;margin-top:2px}
+
+.plab{font-size:11px;font-weight:750;letter-spacing:.14em;color:var(--mut);
+  text-transform:uppercase;padding:2px 3px 9px}
 .preset{
   background:var(--surf);border:1px solid var(--line);border-radius:var(--r);
-  padding:16px 18px;display:flex;align-items:center;gap:14px;
+  padding:16px 16px 16px 20px;display:flex;align-items:center;gap:14px;
 }
-.preset .lab{font-size:11px;font-weight:700;letter-spacing:.13em;color:var(--mut);text-transform:uppercase}
-.preset .fig{font-size:31px;font-weight:800;letter-spacing:-.03em;line-height:1.05;margin-top:5px}
-.preset .fig em{font-style:normal;font-size:.55em;font-weight:650;color:var(--mut);letter-spacing:0}
-.edit{border:1px solid var(--line);border-radius:11px;padding:11px 15px;font-size:14px;font-weight:650;color:var(--mut);flex:none}
+.preset .fig{font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1.05;flex:1;min-width:0}
+.preset .fig em{font-style:normal;font-size:.5em;font-weight:650;color:var(--mut);letter-spacing:.01em}
+.edit{border:1px solid var(--line);border-radius:11px;padding:11px 16px;font-size:14px;
+  font-weight:650;color:var(--mut);flex:none}
 .edit:active{background:var(--surf2)}
-.lastline{color:var(--mut);font-size:13.5px;padding:11px 3px 0;letter-spacing:.01em}
+
+.acts{display:flex;flex-direction:column;gap:11px;margin-top:14px}
+.act{
+  border-radius:15px;padding:17px 16px;text-align:center;color:#fff;
+  transition:transform .07s ease,filter .07s ease;
+}
+.act:active{transform:scale(.984);filter:brightness(1.16)}
+.act b{display:block;font-size:25px;font-weight:850;letter-spacing:.01em;line-height:1.1}
+.act span{display:block;font-size:13px;font-weight:600;opacity:.72;margin-top:3px}
+.act span em{font-style:normal;opacity:.72}
+.a-base{background:var(--push)}
+.a-edge{background:var(--pull)}
+.a-add{background:transparent;border:1px solid var(--line);color:var(--tx)}
+.a-add:active{background:var(--surf)}
+.a-add span{color:var(--mut);opacity:1}
 
 .sect{display:flex;align-items:center;gap:10px;margin:26px 3px 11px}
 .sect h2{margin:0;font-size:11px;font-weight:750;letter-spacing:.15em;text-transform:uppercase;color:var(--mut)}
 .sect .ct{margin-left:auto;font-size:12px;color:var(--dim);font-weight:600}
 
 .set{
-  display:flex;align-items:center;gap:13px;padding:14px 16px;
+  display:flex;align-items:center;gap:14px;padding:15px 17px;
   background:var(--surf);border:1px solid var(--line);border-radius:12px;margin-bottom:7px;
   animation:in .22s ease both;
 }
 @keyframes in{from{opacity:0;transform:translateY(-7px)}}
-.set .tick{color:var(--ok);font-size:15px;flex:none}
-.set .fg{font-size:19px;font-weight:700;letter-spacing:-.015em}
-.set .tm{margin-left:auto;font-size:13px;color:var(--mut);font-weight:550}
-.set.ramp .fg{color:var(--mut);font-weight:600}
-.set .del{color:var(--dim);font-size:16px;padding:2px 4px;flex:none;display:none}
+.set .tick{width:21px;height:21px;border-radius:50%;border:1.5px solid var(--push);color:var(--push);
+  font-size:11px;display:grid;place-items:center;flex:none}
+.set.edge .tick{border-color:var(--pull);color:var(--pull)}
+.set.ramp .tick{border-color:var(--dim);color:var(--dim)}
+.set .tm{font-size:14px;color:var(--mut);font-weight:600;width:74px;flex:none}
+.set .fg{font-size:18px;font-weight:700;letter-spacing:-.015em}
+.set .fg em{font-style:normal;font-size:.78em;font-weight:600;color:var(--mut)}
+.set .tag{margin-left:auto;font-size:11px;font-weight:750;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--pull)}
+.set.ramp .tag{color:var(--dim)}
+.set .del{margin-left:auto;color:#c9564c;font-size:14px;font-weight:700;padding:2px 4px;flex:none;display:none}
 .set.on .del{display:block}
+.set.on .tag{display:none}
 
 .empty{color:var(--dim);font-size:14.5px;padding:16px 3px;line-height:1.5}
 .dayhd{font-size:12px;font-weight:700;letter-spacing:.09em;color:var(--dim);
@@ -115,31 +143,6 @@ button{background:none;border:0;cursor:pointer}
 .more{width:100%;padding:15px;border:1px solid var(--line);border-radius:12px;
   color:var(--mut);font-size:14px;font-weight:650;margin-top:6px}
 .more:active{background:var(--surf)}
-
-/* ── action dock ─────────────────────────────────────── */
-.dockpad{height:196px}
-.dock{
-  position:fixed;left:0;right:0;bottom:0;z-index:30;
-  padding:22px 16px calc(var(--safe-b) + 16px);
-  background:linear-gradient(transparent,var(--bg) 26%);
-  display:flex;flex-direction:column;gap:10px;
-}
-.base{
-  border-radius:16px;padding:22px 20px;text-align:left;color:#fff;
-  display:flex;align-items:center;justify-content:space-between;gap:14px;
-  transition:transform .07s ease,filter .07s ease;
-  box-shadow:0 8px 30px -10px rgba(0,0,0,.9);
-}
-.base:active{transform:scale(.978);filter:brightness(1.16)}
-.base .bl{font-size:12px;font-weight:800;letter-spacing:.16em;opacity:.68}
-.base .bf{font-size:30px;font-weight:850;letter-spacing:-.03em;line-height:1.06;margin-top:4px}
-.base .bf em{font-style:normal;font-size:.58em;font-weight:700;opacity:.7;letter-spacing:0}
-.base .arw{font-size:27px;opacity:.6;flex:none}
-.add{
-  border:1px solid var(--line);background:var(--surf);border-radius:14px;padding:17px;
-  font-size:16px;font-weight:700;letter-spacing:.01em;color:var(--tx);
-}
-.add:active{background:var(--surf2)}
 
 /* ── sheet ───────────────────────────────────────────── */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.66);z-index:40;animation:fade .16s ease}
@@ -293,12 +296,14 @@ const inSplit = s => Object.keys(EX)
    PRESETS — new append-only species. Latest per exercise is current.
    Nothing changes a preset except an explicit edit.
    ══════════════════════════════════════════════════════════════════ */
-function presetOf(id){
-  const ps = events("preset").filter(e=>e.ex===id).sort((a,b)=>b.ts-a.ts);
+function presetOf(id, kind){
+  kind = kind || "base";
+  const ps = events("preset").filter(e=>e.ex===id && (e.pkind||"base")===kind).sort((a,b)=>b.ts-a.ts);
   return ps[0] || null;
 }
-function presetHistory(id){
-  return events("preset").filter(e=>e.ex===id).sort((a,b)=>b.ts-a.ts);
+function presetHistory(id, kind){
+  kind = kind || "base";
+  return events("preset").filter(e=>e.ex===id && (e.pkind||"base")===kind).sort((a,b)=>b.ts-a.ts);
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -390,33 +395,40 @@ function viewSplit(s){
 function viewExercise(id){
   const m = EX[id];
   if(!m){ SCREEN={v:"home"}; return viewHome(); }
-  const p = presetOf(id), all = setsOf(id);
+  const pb = presetOf(id,"base"), pe = presetOf(id,"edge");
+  const all = setsOf(id);
   const today = all.filter(e=>dayKey(e.ts)===todayK());
-  const last = all[0];
+
+  const plain = p => p ? figure(m,p.w,p.reps,p.hold).replace(/<\/?em>/g,"") : null;
 
   let h = '<div class="bar"><button class="back" data-a="split" data-s="'+m.s+'" aria-label="Back">&#8249;</button>'+
-          '<h1>'+esc(m.n)+'</h1>'+
+          '<div class="exhd"><b>'+esc(m.n)+'</b>'+(m.g?'<span>'+esc(m.g)+'</span>':'')+'</div>'+
           '<button class="icon" data-a="exmenu" data-ex="'+id+'" aria-label="Options">&#8943;</button></div>'+
           '<div class="wrap">';
 
-  /* preset */
-  h += '<div class="preset"><div style="flex:1;min-width:0">'+
-       '<div class="lab">Base preset</div>'+
-       '<div class="fig">'+(p ? figure(m,p.w,p.reps,p.hold) : '<em style="font-size:.62em">Not set</em>')+'</div>'+
-       '</div><button class="edit" data-a="editpreset" data-ex="'+id+'">'+(p?"Edit":"Set")+'</button></div>';
+  /* current preset */
+  h += '<div class="plab">Current preset</div>'+
+       '<div class="preset"><div class="fig">'+
+       (pb ? figure(m,pb.w,pb.reps,pb.hold) : '<em style="font-size:.62em">Not set</em>')+
+       '</div><button class="edit" data-a="editpreset" data-k="base" data-ex="'+id+'">'+(pb?"Edit":"Set")+'</button></div>';
 
-  if(last) h += '<div class="lastline">Last recorded '+figure(m,last.w,last.reps,last.hold).replace(/<\/?em>/g,"")+
-                ' &middot; '+ago(last.ts)+'</div>';
+  /* the three actions */
+  h += '<div class="acts">'+
+       '<button class="act a-base" data-a="'+(pb?"base":"editpreset")+'" data-k="base" data-ex="'+id+'">'+
+       '<b>BASE</b><span>'+(pb ? plain(pb) : 'Set a preset first')+'</span></button>'+
+       '<button class="act a-edge" data-a="'+(pe?"edge":"editpreset")+'" data-k="edge" data-ex="'+id+'">'+
+       '<b>EDGE</b><span>'+(pe ? plain(pe) : 'Set an edge preset')+'</span></button>'+
+       '<button class="act a-add" data-a="addset" data-ex="'+id+'">'+
+       '<b>+ ADD</b><span>Log a custom set</span></button>'+
+       '</div>';
 
   /* today */
   h += '<div class="sect"><h2>Today</h2>'+
        (today.length?'<span class="ct">'+today.length+' set'+(today.length===1?"":"s")+'</span>':'')+'</div>';
   if(!today.length){
-    h += '<div class="empty">Nothing recorded today. Press BASE to log the preset.</div>';
+    h += '<div class="empty">Nothing recorded today.</div>';
   }else{
-    today.slice().sort((a,b)=>a.ts-b.ts).forEach(e=>{
-      h += setRow(m,e);
-    });
+    today.slice().sort((a,b)=>a.ts-b.ts).forEach(e=>{ h += setRow(m,e); });
   }
 
   /* earlier */
@@ -426,34 +438,23 @@ function viewExercise(id){
       h += '<button class="more" data-a="showall">Earlier &middot; '+older.length+' set'+(older.length===1?"":"s")+'</button>';
     }else{
       h += '<div class="sect"><h2>Earlier</h2></div>';
-      const days = [...new Set(older.map(e=>dayKey(e.ts)))].slice(0,30);
-      days.forEach(d=>{
+      [...new Set(older.map(e=>dayKey(e.ts)))].slice(0,30).forEach(d=>{
         h += '<div class="dayhd">'+esc(dayLabel(d))+'</div>';
         older.filter(e=>dayKey(e.ts)===d).sort((a,b)=>a.ts-b.ts).forEach(e=>{ h += setRow(m,e); });
       });
       h += '<button class="more" data-a="showall">Collapse</button>';
     }
   }
-
-  h += '<div class="dockpad"></div></div>';
-
-  /* dock */
-  const fig = p ? figure(m,p.w,p.reps,p.hold) : '<em style="font-size:.62em">Set a preset first</em>';
-  h += '<div class="dock">'+
-       '<button class="base c-'+m.s+'" data-a="'+(p?"base":"editpreset")+'" data-ex="'+id+'">'+
-       '<span><span class="bl">BASE</span><span class="bf">'+fig+'</span></span>'+
-       '<span class="arw">&#10003;</span></button>'+
-       '<button class="add" data-a="addset" data-ex="'+id+'">+ ADD</button></div>';
-  return h;
+  return h+'</div>';
 }
 
 function setRow(m,e){
-  const armed = ARMED===e.id;
-  return '<div class="set'+(e.setkind==="ramp"?" ramp":"")+(armed?" on":"")+'" data-a="armset" data-id="'+e.id+'">'+
+  const armed = ARMED===e.id, k = e.setkind||"work";
+  return '<div class="set '+esc(k)+(armed?" on":"")+'" data-a="armset" data-id="'+e.id+'">'+
          '<span class="tick">&#10003;</span>'+
-         '<span class="fg">'+figure(m,e.w,e.reps,e.hold)+'</span>'+
-         (e.setkind==="ramp"?'<span class="tm" style="margin-left:8px">ramp</span>':'')+
          '<span class="tm">'+clock(e.ts)+'</span>'+
+         '<span class="fg">'+figure(m,e.w,e.reps,e.hold)+'</span>'+
+         (k!=="work"?'<span class="tag">'+esc(k)+'</span>':'')+
          (armed?'<button class="del" data-a="voidset" data-id="'+e.id+'">Void</button>':'')+
          '</div>';
 }
@@ -473,22 +474,25 @@ function stepper(key,label,unit,step){
 }
 
 function sheetSet(){
-  const m = EX[F.ex], colour = "c-"+m.s;
+  const m = EX[F.ex];
+  const colour = F.mode==="preset" ? (F.pkind==="edge"?"c-pull":"c-push")
+               : (F.setkind==="edge"?"c-pull":"c-push");
+  const kn = F.pkind==="edge" ? "Edge" : "Base";
   let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
-          '<div class="grab"></div><h3>'+(F.mode==="preset"?"Base preset":"Record a set")+' &mdash; '+esc(m.n)+'</h3>';
-  if(F.mode==="preset") h += '<div class="hint">This is what BASE records from now on. It changes only here.</div>';
+          '<div class="grab"></div><h3>'+(F.mode==="preset"?kn+" preset":"Record a set")+' &mdash; '+esc(m.n)+'</h3>';
+  if(F.mode==="preset") h += '<div class="hint">This is what '+kn.toUpperCase()+' records from now on. It changes only here.</div>';
   h += stepper("w", m.bw?"Load (lb &middot; 0 = bodyweight)":"Load (lb)","lb",5);
   h += m.iso ? stepper("hold","Hold","s",5) : stepper("reps","Reps","",1);
   if(F.mode==="set"){
     h += '<div class="fld"><label>Kind</label><div class="segs">'+
-         '<button class="seg" data-a="kind" data-v="work" aria-pressed="'+(F.setkind!=="ramp")+'">Work</button>'+
-         '<button class="seg" data-a="kind" data-v="ramp" aria-pressed="'+(F.setkind==="ramp")+'">Ramp</button>'+
+         ["work","edge","ramp"].map(v=>'<button class="seg" data-a="kind" data-v="'+v+'" aria-pressed="'+
+           ((F.setkind||"work")===v)+'">'+v[0].toUpperCase()+v.slice(1)+'</button>').join("")+
          '</div></div>';
   }
   h += '<button class="save '+colour+'" data-a="'+(F.mode==="preset"?"savepreset":"saveset")+'">'+
-       (F.mode==="preset"?"Save preset":"Record set")+'</button>';
+       (F.mode==="preset"?"Save "+kn.toLowerCase()+" preset":"Record set")+'</button>';
   if(F.mode==="preset"){
-    const ph = presetHistory(F.ex);
+    const ph = presetHistory(F.ex, F.pkind);
     if(ph.length){
       h += '<div class="sect"><h2>Preset history</h2></div>';
       ph.slice(0,6).forEach(e=>{
@@ -540,7 +544,8 @@ function sheetManage(){
 function sheetExMenu(){
   return '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
     '<div class="grab"></div><h3>'+esc(EX[F.ex].n)+'</h3>'+
-    '<button class="sub2" data-a="editpreset" data-ex="'+F.ex+'">Edit base preset</button>'+
+    '<button class="sub2" data-a="editpreset" data-k="base" data-ex="'+F.ex+'">Edit base preset</button>'+
+    '<button class="sub2" data-a="editpreset" data-k="edge" data-ex="'+F.ex+'">Edit edge preset</button>'+
     '<button class="sub2" data-a="editdef" data-ex="'+F.ex+'">Edit movement</button>'+
     '</div>';
 }
@@ -593,13 +598,14 @@ document.addEventListener("click", ev=>{
   if(a==="showall"){ SHOW_ALL=!SHOW_ALL; return render(); }
 
   /* the one that matters */
-  if(a==="base"){
-    const id = t.dataset.ex, p = presetOf(id);
+  if(a==="base" || a==="edge"){
+    const id = t.dataset.ex, p = presetOf(id, a);
     if(!p) return;
     window.__sy = window.scrollY;
     const ok = append({species:"observation", kind:"set", ex:id,
-                       w:p.w, reps:p.reps||0, hold:p.hold||0, setkind:"work", unit:"lb"});
-    if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); render(); }
+                       w:p.w, reps:p.reps||0, hold:p.hold||0,
+                       setkind:(a==="edge"?"edge":"work"), unit:"lb"});
+    if(ok){ buzz(a==="edge"?24:14); toast(a.toUpperCase()+" recorded · "+clock(ok.ts)); render(); }
     return;
   }
 
@@ -609,8 +615,9 @@ document.addEventListener("click", ev=>{
     SHEET = sheetSet; return render();
   }
   if(a==="editpreset"){
-    const id = t.dataset.ex, p = presetOf(id) || {w:0,reps:0,hold:0};
-    F = {ex:id, mode:"preset", w:p.w, reps:p.reps||0, hold:p.hold||0};
+    const id = t.dataset.ex, k = t.dataset.k || "base";
+    const p = presetOf(id,k) || presetOf(id,"base") || {w:0,reps:0,hold:0};
+    F = {ex:id, mode:"preset", pkind:k, w:p.w, reps:p.reps||0, hold:p.hold||0};
     SHEET = sheetSet; return render();
   }
 
@@ -640,8 +647,9 @@ document.addEventListener("click", ev=>{
     const m = EX[F.ex];
     if(!m.iso && !F.reps){ return toast("Reps is 0. Set a value.", true); }
     if(m.iso && !F.hold){ return toast("Hold is 0. Set a value.", true); }
-    append({species:"preset", ex:F.ex, w:F.w||0, reps:F.reps||0, hold:F.hold||0, unit:"lb"});
-    toast("Preset saved");
+    append({species:"preset", ex:F.ex, pkind:F.pkind||"base",
+            w:F.w||0, reps:F.reps||0, hold:F.hold||0, unit:"lb"});
+    toast((F.pkind==="edge"?"Edge":"Base")+" preset saved");
     return closeSheet();
   }
 
