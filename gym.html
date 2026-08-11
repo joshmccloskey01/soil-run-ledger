@@ -308,7 +308,7 @@ function presetHistory(id){
 const setsOf = id => obsOf("set").filter(e=>e.ex===id).sort((a,b)=>b.ts-a.ts);
 
 function figure(m, w, reps, hold){
-  const load = (Number(w)===0 && m.bw) ? "BW" : num(w)+"<em> kg</em>";
+  const load = (Number(w)===0 && m.bw) ? "BW" : num(w)+"<em> lb</em>";
   const right = m.iso ? num(hold)+"<em> s</em>" : num(reps)+"<em> reps</em>";
   return load+' <em>×</em> '+right;
 }
@@ -477,7 +477,7 @@ function sheetSet(){
   let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
           '<div class="grab"></div><h3>'+(F.mode==="preset"?"Base preset":"Record a set")+' &mdash; '+esc(m.n)+'</h3>';
   if(F.mode==="preset") h += '<div class="hint">This is what BASE records from now on. It changes only here.</div>';
-  h += stepper("w", m.bw?"Load (kg &middot; 0 = bodyweight)":"Load (kg)","kg",2.5);
+  h += stepper("w", m.bw?"Load (lb &middot; 0 = bodyweight)":"Load (lb)","lb",5);
   h += m.iso ? stepper("hold","Hold","s",5) : stepper("reps","Reps","",1);
   if(F.mode==="set"){
     h += '<div class="fld"><label>Kind</label><div class="segs">'+
@@ -598,7 +598,7 @@ document.addEventListener("click", ev=>{
     if(!p) return;
     window.__sy = window.scrollY;
     const ok = append({species:"observation", kind:"set", ex:id,
-                       w:p.w, reps:p.reps||0, hold:p.hold||0, setkind:"work"});
+                       w:p.w, reps:p.reps||0, hold:p.hold||0, setkind:"work", unit:"lb"});
     if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); render(); }
     return;
   }
@@ -631,7 +631,7 @@ document.addEventListener("click", ev=>{
     if(!m.iso && !F.reps){ return toast("Reps is 0. Nothing to record.", true); }
     if(m.iso && !F.hold){ return toast("Hold is 0. Nothing to record.", true); }
     const ok = append({species:"observation", kind:"set", ex:F.ex,
-                       w:F.w||0, reps:F.reps||0, hold:F.hold||0, setkind:F.setkind||"work"});
+                       w:F.w||0, reps:F.reps||0, hold:F.hold||0, setkind:F.setkind||"work", unit:"lb"});
     if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); }
     return closeSheet();
   }
@@ -640,7 +640,7 @@ document.addEventListener("click", ev=>{
     const m = EX[F.ex];
     if(!m.iso && !F.reps){ return toast("Reps is 0. Set a value.", true); }
     if(m.iso && !F.hold){ return toast("Hold is 0. Set a value.", true); }
-    append({species:"preset", ex:F.ex, w:F.w||0, reps:F.reps||0, hold:F.hold||0});
+    append({species:"preset", ex:F.ex, w:F.w||0, reps:F.reps||0, hold:F.hold||0, unit:"lb"});
     toast("Preset saved");
     return closeSheet();
   }
