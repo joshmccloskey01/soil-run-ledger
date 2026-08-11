@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gym">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#05080c">
+<title>Gym</title>
+<style>
+:root{
+  --bg:#05080c; --surf:#0e141c; --surf2:#151d28; --line:#1f2a37;
+  --tx:#eef2f7; --mut:#7f8d9e; --dim:#4a5765;
+  --push:#1656c9; --pull:#a8322c; --legs:#176b45;
+  --ok:#2ea36b;
+  --r:14px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg); color:var(--tx);
+  font:400 16px/1.4 ui-sans-serif,-apple-system,"SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;
+  font-variant-numeric:tabular-nums;
+  overscroll-behavior-y:none;
+}
+button,input,select{font:inherit;color:inherit;font-variant-numeric:tabular-nums}
+button{background:none;border:0;cursor:pointer}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+/* ── shell ───────────────────────────────────────────── */
+#app{display:flex;flex-direction:column;min-height:100%}
+.bar{
+  display:flex;align-items:center;gap:12px;
+  padding:calc(var(--safe-t) + 14px) 16px 12px;
+  position:sticky;top:0;z-index:20;
+  background:linear-gradient(var(--bg) 78%,transparent);
+}
+.bar h1{margin:0;font-size:19px;font-weight:750;letter-spacing:-.02em;flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.back{width:42px;height:42px;margin-left:-8px;border-radius:12px;display:grid;place-items:center;
+  font-size:24px;color:var(--mut)}
+.back:active{background:var(--surf)}
+.icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:var(--mut);font-size:19px}
+.icon:active{background:var(--surf)}
+.wrap{flex:1;padding:0 16px 28px}
+
+/* ── home ────────────────────────────────────────────── */
+.cats{display:flex;flex-direction:column;gap:14px;padding-top:4px}
+.cat{
+  border-radius:var(--r);padding:30px 24px;text-align:left;
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  transition:transform .09s ease,filter .09s ease;
+}
+.cat:active{transform:scale(.982);filter:brightness(1.14)}
+.cat b{display:block;font-size:clamp(40px,13vw,58px);font-weight:850;letter-spacing:-.035em;line-height:.94}
+.cat span{font-size:14px;font-weight:600;color:rgba(255,255,255,.62);letter-spacing:.02em}
+.c-push{background:var(--push)} .c-pull{background:var(--pull)} .c-legs{background:var(--legs)}
+
+/* ── exercise list ───────────────────────────────────── */
+.list{display:flex;flex-direction:column;gap:9px}
+.row{
+  background:var(--surf);border-radius:var(--r);border:1px solid var(--line);
+  padding:19px 18px;display:flex;align-items:center;gap:14px;text-align:left;width:100%;
+}
+.row:active{background:var(--surf2)}
+.row .nm{flex:1;min-width:0;font-size:21px;font-weight:650;letter-spacing:-.02em;line-height:1.15}
+.row .sub{display:block;font-size:13px;font-weight:500;color:var(--mut);margin-top:3px;letter-spacing:.01em}
+.row .chev{color:var(--dim);font-size:20px}
+.stripe{width:4px;align-self:stretch;border-radius:3px;flex:none}
+.s-push{background:var(--push)} .s-pull{background:var(--pull)} .s-legs{background:var(--legs)}
+
+.ghost{
+  width:100%;border:1px dashed var(--line);border-radius:var(--r);
+  padding:16px;color:var(--mut);font-size:15px;font-weight:600;margin-top:12px;
+}
+.ghost:active{background:var(--surf)}
+
+/* ── exercise screen ─────────────────────────────────── */
+.preset{
+  background:var(--surf);border:1px solid var(--line);border-radius:var(--r);
+  padding:16px 18px;display:flex;align-items:center;gap:14px;
+}
+.preset .lab{font-size:11px;font-weight:700;letter-spacing:.13em;color:var(--mut);text-transform:uppercase}
+.preset .fig{font-size:31px;font-weight:800;letter-spacing:-.03em;line-height:1.05;margin-top:5px}
+.preset .fig em{font-style:normal;font-size:.55em;font-weight:650;color:var(--mut);letter-spacing:0}
+.edit{border:1px solid var(--line);border-radius:11px;padding:11px 15px;font-size:14px;font-weight:650;color:var(--mut);flex:none}
+.edit:active{background:var(--surf2)}
+.lastline{color:var(--mut);font-size:13.5px;padding:11px 3px 0;letter-spacing:.01em}
+
+.sect{display:flex;align-items:center;gap:10px;margin:26px 3px 11px}
+.sect h2{margin:0;font-size:11px;font-weight:750;letter-spacing:.15em;text-transform:uppercase;color:var(--mut)}
+.sect .ct{margin-left:auto;font-size:12px;color:var(--dim);font-weight:600}
+
+.set{
+  display:flex;align-items:center;gap:13px;padding:14px 16px;
+  background:var(--surf);border:1px solid var(--line);border-radius:12px;margin-bottom:7px;
+  animation:in .22s ease both;
+}
+@keyframes in{from{opacity:0;transform:translateY(-7px)}}
+.set .tick{color:var(--ok);font-size:15px;flex:none}
+.set .fg{font-size:19px;font-weight:700;letter-spacing:-.015em}
+.set .tm{margin-left:auto;font-size:13px;color:var(--mut);font-weight:550}
+.set.ramp .fg{color:var(--mut);font-weight:600}
+.set .del{color:var(--dim);font-size:16px;padding:2px 4px;flex:none;display:none}
+.set.on .del{display:block}
+
+.empty{color:var(--dim);font-size:14.5px;padding:16px 3px;line-height:1.5}
+.dayhd{font-size:12px;font-weight:700;letter-spacing:.09em;color:var(--dim);
+  text-transform:uppercase;padding:16px 3px 8px}
+.more{width:100%;padding:15px;border:1px solid var(--line);border-radius:12px;
+  color:var(--mut);font-size:14px;font-weight:650;margin-top:6px}
+.more:active{background:var(--surf)}
+
+/* ── action dock ─────────────────────────────────────── */
+.dockpad{height:196px}
+.dock{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;
+  padding:22px 16px calc(var(--safe-b) + 16px);
+  background:linear-gradient(transparent,var(--bg) 26%);
+  display:flex;flex-direction:column;gap:10px;
+}
+.base{
+  border-radius:16px;padding:22px 20px;text-align:left;color:#fff;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  transition:transform .07s ease,filter .07s ease;
+  box-shadow:0 8px 30px -10px rgba(0,0,0,.9);
+}
+.base:active{transform:scale(.978);filter:brightness(1.16)}
+.base .bl{font-size:12px;font-weight:800;letter-spacing:.16em;opacity:.68}
+.base .bf{font-size:30px;font-weight:850;letter-spacing:-.03em;line-height:1.06;margin-top:4px}
+.base .bf em{font-style:normal;font-size:.58em;font-weight:700;opacity:.7;letter-spacing:0}
+.base .arw{font-size:27px;opacity:.6;flex:none}
+.add{
+  border:1px solid var(--line);background:var(--surf);border-radius:14px;padding:17px;
+  font-size:16px;font-weight:700;letter-spacing:.01em;color:var(--tx);
+}
+.add:active{background:var(--surf2)}
+
+/* ── sheet ───────────────────────────────────────────── */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.66);z-index:40;animation:fade .16s ease}
+@keyframes fade{from{opacity:0}}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:41;
+  background:var(--surf);border-radius:20px 20px 0 0;border-top:1px solid var(--line);
+  padding:8px 16px calc(var(--safe-b) + 16px);
+  max-height:92vh;overflow-y:auto;animation:up .24s cubic-bezier(.2,.9,.3,1);
+}
+@keyframes up{from{transform:translateY(100%)}}
+.grab{width:38px;height:4px;background:var(--line);border-radius:3px;margin:8px auto 16px}
+.sheet h3{margin:0 0 18px;font-size:20px;font-weight:750;letter-spacing:-.02em}
+.fld{margin-bottom:16px}
+.fld label{display:block;font-size:11px;font-weight:750;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--mut);margin-bottom:9px}
+.step{display:flex;align-items:center;gap:10px}
+.step button{
+  width:60px;height:60px;flex:none;border:1px solid var(--line);background:var(--surf2);
+  border-radius:13px;font-size:26px;font-weight:600;color:var(--tx);
+}
+.step button:active{background:#1e2836}
+.step input{
+  flex:1;min-width:0;height:60px;text-align:center;background:var(--bg);
+  border:1px solid var(--line);border-radius:13px;font-size:26px;font-weight:750;letter-spacing:-.02em;
+}
+.step input:focus{outline:2px solid var(--push);outline-offset:-1px}
+.unit{font-size:14px;color:var(--mut);width:34px;flex:none;font-weight:650}
+.segs{display:flex;gap:8px}
+.seg{flex:1;padding:15px;border:1px solid var(--line);border-radius:12px;
+  font-size:15px;font-weight:650;color:var(--mut);background:var(--bg)}
+.seg[aria-pressed="true"]{background:var(--surf2);color:var(--tx);border-color:var(--dim)}
+.tin{width:100%;height:56px;background:var(--bg);border:1px solid var(--line);
+  border-radius:13px;padding:0 15px;font-size:17px;font-weight:600}
+.tin:focus{outline:2px solid var(--push);outline-offset:-1px}
+.save{width:100%;padding:19px;border-radius:14px;font-size:17px;font-weight:750;
+  color:#fff;margin-top:6px}
+.save:active{filter:brightness(1.15)}
+.sub2{width:100%;padding:15px;border-radius:12px;font-size:15px;font-weight:650;
+  color:var(--mut);margin-top:8px;border:1px solid var(--line)}
+.sub2:active{background:var(--surf2)}
+.danger{color:#c9564c}
+.hint{font-size:13px;color:var(--dim);line-height:1.5;margin:-6px 0 16px}
+
+/* ── toast ───────────────────────────────────────────── */
+#toast{
+  position:fixed;left:16px;right:16px;bottom:calc(var(--safe-b) + 216px);z-index:60;
+  background:var(--surf2);border:1px solid var(--line);border-radius:13px;
+  padding:14px 17px;font-size:15px;font-weight:650;
+  box-shadow:0 10px 34px -10px rgba(0,0,0,.9);
+  opacity:0;transform:translateY(9px);pointer-events:none;transition:all .2s ease;
+}
+#toast.show{opacity:1;transform:none}
+#toast.err{border-color:#7a3a34;color:#e8a49c}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+:focus-visible{outline:2px solid #5b9dff;outline-offset:2px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+/* ══════════════════════════════════════════════════════════════════
+   STORE — same key, same shape, same id generator as ledger.html.
+   Append-only. Nothing is ever rewritten or deleted in place.
+   ══════════════════════════════════════════════════════════════════ */
+const LS_KEY = "ledger.unified.v1";
+let L = {v:1, events:[]};
+let loadErr = null;
+
+function loadLedger(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){
+      const p = JSON.parse(raw);
+      if(p && Array.isArray(p.events)) L = p;
+      else loadErr = "Stored ledger unreadable. Nothing was overwritten.";
+    }
+  }catch(e){ loadErr = "Stored ledger unreadable. Nothing was overwritten."; }
+}
+function saveLedger(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(L)); return true; }
+  catch(e){ toast("Storage full or blocked. Export a backup.", true); return false; }
+}
+function nextId(){
+  return String(L.events.length+1).padStart(5,"0")+"-"+Math.random().toString(36).slice(2,6);
+}
+function append(ev){
+  ev.id = nextId();
+  if(!ev.ts) ev.ts = Date.now();
+  L.events.push(ev);
+  if(!saveLedger()){ L.events.pop(); return null; }
+  return ev;
+}
+const events = sp => L.events.filter(e=>e.species===sp);
+const obsOf  = k  => L.events.filter(e=>e.species==="observation" && e.kind===k);
+
+/* ══════════════════════════════════════════════════════════════════
+   EXERCISE LIBRARY — carried over verbatim from ledger.html.
+   ids preserved so existing set history keeps resolving.
+   n=name  s=split  g=group  iso=isometric  bw=bodyweight
+   ══════════════════════════════════════════════════════════════════ */
+const EX_SEED = {
+  pla:{n:"Planche progression",s:"push",g:"Skill strength",iso:1,bw:1},
+  bp:{n:"Bench press",s:"push",g:"Press"},
+  pu:{n:"Push-ups",s:"push",g:"Press",bw:1},
+  sap:{n:"Standing single-arm press",s:"push",g:"Press"},
+  blr:{n:"Banded lateral raise",s:"push",g:"Shoulders",bw:1},
+  wlr:{n:"Weighted lateral raise",s:"push",g:"Shoulders"},
+  ctp:{n:"Cable triceps pushdown",s:"push",g:"Arms"},
+  fle:{n:"Ring front lever",s:"pull",g:"Skill strength",iso:1,bw:1},
+  pc:{n:"Power clean",s:"pull",g:"Power"},
+  sld:{n:"Straight-leg deadlift",s:"pull",g:"Hinge"},
+  wpu:{n:"Weighted neutral pull-up",s:"pull",g:"Vertical pull",bw:1},
+  rap:{n:"Ring archer pull-up",s:"pull",g:"Vertical pull",bw:1},
+  oap:{n:"One-arm pull-up",s:"pull",g:"Vertical pull",bw:1},
+  hcr:{n:"Standing high cable row",s:"pull",g:"Horizontal pull"},
+  idc:{n:"Incline dumbbell curl",s:"pull",g:"Arms"},
+  fw:{n:"Forearm work",s:"pull",g:"Forearms"},
+  tsl:{n:"Trap bar single-leg DL",s:"legs",g:"Hinge"},
+  gbm:{n:"Glute bridge machine",s:"legs",g:"Hip"},
+  ghr:{n:"Glute-ham raise",s:"legs",g:"Hip",bw:1},
+  lex:{n:"Leg extension",s:"legs",g:"Knee"},
+  lcu:{n:"Leg curl",s:"legs",g:"Knee"},
+  cra:{n:"Standing calf raise",s:"legs",g:"Lower leg"},
+  tib:{n:"Tibialis raise",s:"legs",g:"Lower leg"},
+  pis:{n:"Pistol squat (probe)",s:"legs",g:"Knee",bw:1}
+};
+const SPLITS = {push:"Push", pull:"Pull", legs:"Legs"};
+const SUBTITLE = {push:"Extension", pull:"Curl / Row", legs:"Lower body"};
+
+/* User edits/additions ride as append-only `exdef` events; latest wins. */
+function library(){
+  const lib = {};
+  for(const k in EX_SEED) lib[k] = Object.assign({ord:Object.keys(EX_SEED).indexOf(k)}, EX_SEED[k]);
+  events("exdef").sort((a,b)=>a.ts-b.ts).forEach(e=>{
+    lib[e.ex] = Object.assign(lib[e.ex]||{ord:900}, e.def);
+  });
+  return lib;
+}
+let EX = {};
+const inSplit = s => Object.keys(EX)
+  .filter(k=>EX[k].s===s && !EX[k].hidden)
+  .sort((a,b)=>(EX[a].ord??900)-(EX[b].ord??900));
+
+/* ══════════════════════════════════════════════════════════════════
+   PRESETS — new append-only species. Latest per exercise is current.
+   Nothing changes a preset except an explicit edit.
+   ══════════════════════════════════════════════════════════════════ */
+function presetOf(id){
+  const ps = events("preset").filter(e=>e.ex===id).sort((a,b)=>b.ts-a.ts);
+  return ps[0] || null;
+}
+function presetHistory(id){
+  return events("preset").filter(e=>e.ex===id).sort((a,b)=>b.ts-a.ts);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SETS — record shape identical to ledger.html.
+   {species:"observation", kind:"set", ex, w, reps, hold, setkind}
+   ══════════════════════════════════════════════════════════════════ */
+const setsOf = id => obsOf("set").filter(e=>e.ex===id).sort((a,b)=>b.ts-a.ts);
+
+function figure(m, w, reps, hold){
+  const load = (Number(w)===0 && m.bw) ? "BW" : num(w)+"<em> kg</em>";
+  const right = m.iso ? num(hold)+"<em> s</em>" : num(reps)+"<em> reps</em>";
+  return load+' <em>×</em> '+right;
+}
+const num = v => { const n=Number(v)||0; return Number.isInteger(n)?String(n):String(n); };
+
+/* ── time ── */
+const pad = n => String(n).padStart(2,"0");
+function dayKey(ts){ const d=new Date(ts); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+const todayK = () => dayKey(Date.now());
+function clock(ts){
+  const d=new Date(ts); let h=d.getHours(); const ap=h<12?"AM":"PM";
+  h=h%12||12; return h+":"+pad(d.getMinutes())+" "+ap;
+}
+function dayLabel(k){
+  if(k===todayK()) return "Today";
+  const y=new Date(Date.now()-864e5); if(k===dayKey(y.getTime())) return "Yesterday";
+  const [Y,M,D]=k.split("-").map(Number);
+  return new Date(Y,M-1,D).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+}
+function ago(ts){
+  const d=Math.floor((Date.now()-ts)/864e5);
+  if(dayKey(ts)===todayK()) return "today";
+  if(d<=1) return "yesterday";
+  return d+" days ago";
+}
+
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ══════════════════════════════════════════════════════════════════
+   VIEWS
+   ══════════════════════════════════════════════════════════════════ */
+let SCREEN = {v:"home"};
+let SHEET = null;
+let SHOW_ALL = false;
+let ARMED = null;
+
+function render(){
+  EX = library();
+  const app = document.getElementById("app");
+  app.innerHTML = SCREEN.v==="home" ? viewHome()
+                : SCREEN.v==="split" ? viewSplit(SCREEN.s)
+                : viewExercise(SCREEN.ex);
+  if(SHEET) app.insertAdjacentHTML("beforeend", SHEET());
+  window.scrollTo(0, SCREEN.v==="ex" ? window.__sy||0 : 0);
+}
+
+function viewHome(){
+  let h = '<div class="bar"><h1>Gym</h1>'+
+          '<button class="icon" data-a="settings" aria-label="Settings">&#9881;</button></div>'+
+          '<div class="wrap"><div class="cats">';
+  ["push","pull","legs"].forEach(s=>{
+    h += '<button class="cat c-'+s+'" data-a="split" data-s="'+s+'">'+
+         '<b>'+SPLITS[s].toUpperCase()+'</b><span>'+SUBTITLE[s]+'</span></button>';
+  });
+  h += '</div>';
+  if(loadErr) h += '<div class="empty">'+esc(loadErr)+'</div>';
+  return h+'</div>';
+}
+
+function viewSplit(s){
+  const ids = inSplit(s);
+  let h = '<div class="bar"><button class="back" data-a="home" aria-label="Back">&#8249;</button>'+
+          '<h1>'+SPLITS[s]+'</h1>'+
+          '<button class="icon" data-a="manage" data-s="'+s+'" aria-label="Edit list">&#8943;</button></div>'+
+          '<div class="wrap"><div class="list">';
+  if(!ids.length) h += '<div class="empty">No movements here yet. Add one below.</div>';
+  ids.forEach(id=>{
+    const m = EX[id], p = presetOf(id);
+    h += '<button class="row" data-a="ex" data-ex="'+id+'">'+
+         '<span class="stripe s-'+s+'"></span>'+
+         '<span class="nm">'+esc(m.n)+
+         '<span class="sub">'+(p ? figure(m,p.w,p.reps,p.hold).replace(/<\/?em>/g,"") : esc(m.g||""))+'</span></span>'+
+         '<span class="chev">&#8250;</span></button>';
+  });
+  h += '</div><button class="ghost" data-a="newex" data-s="'+s+'">+ Add movement</button>';
+  return h+'</div>';
+}
+
+function viewExercise(id){
+  const m = EX[id];
+  if(!m){ SCREEN={v:"home"}; return viewHome(); }
+  const p = presetOf(id), all = setsOf(id);
+  const today = all.filter(e=>dayKey(e.ts)===todayK());
+  const last = all[0];
+
+  let h = '<div class="bar"><button class="back" data-a="split" data-s="'+m.s+'" aria-label="Back">&#8249;</button>'+
+          '<h1>'+esc(m.n)+'</h1>'+
+          '<button class="icon" data-a="exmenu" data-ex="'+id+'" aria-label="Options">&#8943;</button></div>'+
+          '<div class="wrap">';
+
+  /* preset */
+  h += '<div class="preset"><div style="flex:1;min-width:0">'+
+       '<div class="lab">Base preset</div>'+
+       '<div class="fig">'+(p ? figure(m,p.w,p.reps,p.hold) : '<em style="font-size:.62em">Not set</em>')+'</div>'+
+       '</div><button class="edit" data-a="editpreset" data-ex="'+id+'">'+(p?"Edit":"Set")+'</button></div>';
+
+  if(last) h += '<div class="lastline">Last recorded '+figure(m,last.w,last.reps,last.hold).replace(/<\/?em>/g,"")+
+                ' &middot; '+ago(last.ts)+'</div>';
+
+  /* today */
+  h += '<div class="sect"><h2>Today</h2>'+
+       (today.length?'<span class="ct">'+today.length+' set'+(today.length===1?"":"s")+'</span>':'')+'</div>';
+  if(!today.length){
+    h += '<div class="empty">Nothing recorded today. Press BASE to log the preset.</div>';
+  }else{
+    today.slice().sort((a,b)=>a.ts-b.ts).forEach(e=>{
+      h += setRow(m,e);
+    });
+  }
+
+  /* earlier */
+  const older = all.filter(e=>dayKey(e.ts)!==todayK());
+  if(older.length){
+    if(!SHOW_ALL){
+      h += '<button class="more" data-a="showall">Earlier &middot; '+older.length+' set'+(older.length===1?"":"s")+'</button>';
+    }else{
+      h += '<div class="sect"><h2>Earlier</h2></div>';
+      const days = [...new Set(older.map(e=>dayKey(e.ts)))].slice(0,30);
+      days.forEach(d=>{
+        h += '<div class="dayhd">'+esc(dayLabel(d))+'</div>';
+        older.filter(e=>dayKey(e.ts)===d).sort((a,b)=>a.ts-b.ts).forEach(e=>{ h += setRow(m,e); });
+      });
+      h += '<button class="more" data-a="showall">Collapse</button>';
+    }
+  }
+
+  h += '<div class="dockpad"></div></div>';
+
+  /* dock */
+  const fig = p ? figure(m,p.w,p.reps,p.hold) : '<em style="font-size:.62em">Set a preset first</em>';
+  h += '<div class="dock">'+
+       '<button class="base c-'+m.s+'" data-a="'+(p?"base":"editpreset")+'" data-ex="'+id+'">'+
+       '<span><span class="bl">BASE</span><span class="bf">'+fig+'</span></span>'+
+       '<span class="arw">&#10003;</span></button>'+
+       '<button class="add" data-a="addset" data-ex="'+id+'">+ ADD</button></div>';
+  return h;
+}
+
+function setRow(m,e){
+  const armed = ARMED===e.id;
+  return '<div class="set'+(e.setkind==="ramp"?" ramp":"")+(armed?" on":"")+'" data-a="armset" data-id="'+e.id+'">'+
+         '<span class="tick">&#10003;</span>'+
+         '<span class="fg">'+figure(m,e.w,e.reps,e.hold)+'</span>'+
+         (e.setkind==="ramp"?'<span class="tm" style="margin-left:8px">ramp</span>':'')+
+         '<span class="tm">'+clock(e.ts)+'</span>'+
+         (armed?'<button class="del" data-a="voidset" data-id="'+e.id+'">Void</button>':'')+
+         '</div>';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SHEETS
+   ══════════════════════════════════════════════════════════════════ */
+let F = {};
+
+function stepper(key,label,unit,step){
+  return '<div class="fld"><label>'+esc(label)+'</label><div class="step">'+
+    '<button data-a="dec" data-k="'+key+'" data-st="'+step+'" aria-label="Decrease">&minus;</button>'+
+    '<input id="f_'+key+'" type="number" inputmode="decimal" value="'+(F[key]??0)+'" data-k="'+key+'">'+
+    (unit?'<span class="unit">'+esc(unit)+'</span>':'')+
+    '<button data-a="inc" data-k="'+key+'" data-st="'+step+'" aria-label="Increase">+</button>'+
+    '</div></div>';
+}
+
+function sheetSet(){
+  const m = EX[F.ex], colour = "c-"+m.s;
+  let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
+          '<div class="grab"></div><h3>'+(F.mode==="preset"?"Base preset":"Record a set")+' &mdash; '+esc(m.n)+'</h3>';
+  if(F.mode==="preset") h += '<div class="hint">This is what BASE records from now on. It changes only here.</div>';
+  h += stepper("w", m.bw?"Load (kg &middot; 0 = bodyweight)":"Load (kg)","kg",2.5);
+  h += m.iso ? stepper("hold","Hold","s",5) : stepper("reps","Reps","",1);
+  if(F.mode==="set"){
+    h += '<div class="fld"><label>Kind</label><div class="segs">'+
+         '<button class="seg" data-a="kind" data-v="work" aria-pressed="'+(F.setkind!=="ramp")+'">Work</button>'+
+         '<button class="seg" data-a="kind" data-v="ramp" aria-pressed="'+(F.setkind==="ramp")+'">Ramp</button>'+
+         '</div></div>';
+  }
+  h += '<button class="save '+colour+'" data-a="'+(F.mode==="preset"?"savepreset":"saveset")+'">'+
+       (F.mode==="preset"?"Save preset":"Record set")+'</button>';
+  if(F.mode==="preset"){
+    const ph = presetHistory(F.ex);
+    if(ph.length){
+      h += '<div class="sect"><h2>Preset history</h2></div>';
+      ph.slice(0,6).forEach(e=>{
+        h += '<div class="set"><span class="fg">'+figure(m,e.w,e.reps,e.hold)+'</span>'+
+             '<span class="tm">'+esc(dayLabel(dayKey(e.ts)))+'</span></div>';
+      });
+    }
+  }
+  return h+'</div>';
+}
+
+function sheetExDef(){
+  const isNew = !F.ex;
+  let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
+          '<div class="grab"></div><h3>'+(isNew?"New movement":"Edit movement")+'</h3>'+
+          '<div class="fld"><label>Name</label><input class="tin" id="f_n" value="'+esc(F.n||"")+'" placeholder="e.g. Ring dip"></div>'+
+          '<div class="fld"><label>Group</label><input class="tin" id="f_g" value="'+esc(F.g||"")+'" placeholder="optional"></div>'+
+          '<div class="fld"><label>Category</label><div class="segs">'+
+          ["push","pull","legs"].map(s=>'<button class="seg" data-a="cat" data-v="'+s+'" aria-pressed="'+(F.s===s)+'">'+SPLITS[s]+'</button>').join("")+
+          '</div></div>'+
+          '<div class="fld"><label>Measured in</label><div class="segs">'+
+          '<button class="seg" data-a="iso" data-v="0" aria-pressed="'+(!F.iso)+'">Reps</button>'+
+          '<button class="seg" data-a="iso" data-v="1" aria-pressed="'+(!!F.iso)+'">Hold (s)</button>'+
+          '</div></div>'+
+          '<div class="fld"><label>Load</label><div class="segs">'+
+          '<button class="seg" data-a="bw" data-v="0" aria-pressed="'+(!F.bw)+'">Weighted</button>'+
+          '<button class="seg" data-a="bw" data-v="1" aria-pressed="'+(!!F.bw)+'">Bodyweight</button>'+
+          '</div></div>'+
+          '<button class="save c-'+(F.s||"push")+'" data-a="savedef">'+(isNew?"Add movement":"Save")+'</button>';
+  if(!isNew) h += '<button class="sub2 danger" data-a="hideex">Remove from list</button>';
+  return h+'</div>';
+}
+
+function sheetManage(){
+  const ids = inSplit(F.s);
+  let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
+          '<div class="grab"></div><h3>'+SPLITS[F.s]+' list</h3>'+
+          '<div class="hint">Reorder with the arrows. Tap a name to edit it.</div><div class="list">';
+  ids.forEach((id,i)=>{
+    h += '<div class="row" style="padding:13px 14px">'+
+         '<span class="nm" style="font-size:17px" data-a="editdef" data-ex="'+id+'">'+esc(EX[id].n)+'</span>'+
+         '<button class="edit" data-a="mv" data-ex="'+id+'" data-d="-1" '+(i===0?"disabled style=opacity:.3":"")+' aria-label="Up">&#8593;</button>'+
+         '<button class="edit" data-a="mv" data-ex="'+id+'" data-d="1" '+(i===ids.length-1?"disabled style=opacity:.3":"")+' aria-label="Down">&#8595;</button>'+
+         '</div>';
+  });
+  return h+'</div></div>';
+}
+
+function sheetExMenu(){
+  return '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
+    '<div class="grab"></div><h3>'+esc(EX[F.ex].n)+'</h3>'+
+    '<button class="sub2" data-a="editpreset" data-ex="'+F.ex+'">Edit base preset</button>'+
+    '<button class="sub2" data-a="editdef" data-ex="'+F.ex+'">Edit movement</button>'+
+    '</div>';
+}
+
+function sheetSettings(){
+  const sets = obsOf("set").length;
+  return '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
+    '<div class="grab"></div><h3>Data</h3>'+
+    '<div class="hint">'+L.events.length+' events in this browser &middot; '+sets+' recorded sets.<br>'+
+    'Storage is local to this device. Export regularly.</div>'+
+    '<button class="sub2" data-a="export">Export backup (.json)</button>'+
+    '<button class="sub2" data-a="import">Import backup</button>'+
+    '<input type="file" id="fimp" accept="application/json" style="display:none">'+
+    '</div>';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ACTIONS
+   ══════════════════════════════════════════════════════════════════ */
+let toastT = null;
+function toast(msg, err){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "show"+(err?" err":"");
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>{ t.className=""; }, 2100);
+}
+const buzz = ms => { try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} };
+
+function closeSheet(){ SHEET=null; F={}; render(); }
+
+function readFields(){
+  ["w","reps","hold"].forEach(k=>{
+    const el = document.getElementById("f_"+k);
+    if(el) F[k] = Number(el.value)||0;
+  });
+  const n = document.getElementById("f_n"); if(n) F.n = n.value.trim();
+  const g = document.getElementById("f_g"); if(g) F.g = g.value.trim();
+}
+
+document.addEventListener("click", ev=>{
+  const t = ev.target.closest("[data-a]");
+  if(!t) return;
+  const a = t.dataset.a;
+
+  /* navigation */
+  if(a==="home"){ SCREEN={v:"home"}; SHOW_ALL=false; ARMED=null; return render(); }
+  if(a==="split"){ SCREEN={v:"split",s:t.dataset.s}; SHOW_ALL=false; ARMED=null; SHEET=null; return render(); }
+  if(a==="ex"){ SCREEN={v:"ex",ex:t.dataset.ex}; SHOW_ALL=false; ARMED=null; window.__sy=0; return render(); }
+  if(a==="close"){ return closeSheet(); }
+  if(a==="showall"){ SHOW_ALL=!SHOW_ALL; return render(); }
+
+  /* the one that matters */
+  if(a==="base"){
+    const id = t.dataset.ex, p = presetOf(id);
+    if(!p) return;
+    window.__sy = window.scrollY;
+    const ok = append({species:"observation", kind:"set", ex:id,
+                       w:p.w, reps:p.reps||0, hold:p.hold||0, setkind:"work"});
+    if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); render(); }
+    return;
+  }
+
+  if(a==="addset"){
+    const id = t.dataset.ex, p = presetOf(id) || {w:0,reps:0,hold:0};
+    F = {ex:id, mode:"set", w:p.w, reps:p.reps||0, hold:p.hold||0, setkind:"work"};
+    SHEET = sheetSet; return render();
+  }
+  if(a==="editpreset"){
+    const id = t.dataset.ex, p = presetOf(id) || {w:0,reps:0,hold:0};
+    F = {ex:id, mode:"preset", w:p.w, reps:p.reps||0, hold:p.hold||0};
+    SHEET = sheetSet; return render();
+  }
+
+  if(a==="inc"||a==="dec"){
+    readFields();
+    const k = t.dataset.k, st = Number(t.dataset.st);
+    F[k] = Math.max(0, Math.round(((F[k]||0) + (a==="inc"?st:-st))*100)/100);
+    return render();
+  }
+  if(a==="kind"){ readFields(); F.setkind = t.dataset.v; return render(); }
+  if(a==="cat"){ readFields(); F.s = t.dataset.v; return render(); }
+  if(a==="iso"){ readFields(); F.iso = Number(t.dataset.v); return render(); }
+  if(a==="bw"){ readFields(); F.bw = Number(t.dataset.v); return render(); }
+
+  if(a==="saveset"){
+    readFields();
+    const m = EX[F.ex];
+    if(!m.iso && !F.reps){ return toast("Reps is 0. Nothing to record.", true); }
+    if(m.iso && !F.hold){ return toast("Hold is 0. Nothing to record.", true); }
+    const ok = append({species:"observation", kind:"set", ex:F.ex,
+                       w:F.w||0, reps:F.reps||0, hold:F.hold||0, setkind:F.setkind||"work"});
+    if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); }
+    return closeSheet();
+  }
+  if(a==="savepreset"){
+    readFields();
+    const m = EX[F.ex];
+    if(!m.iso && !F.reps){ return toast("Reps is 0. Set a value.", true); }
+    if(m.iso && !F.hold){ return toast("Hold is 0. Set a value.", true); }
+    append({species:"preset", ex:F.ex, w:F.w||0, reps:F.reps||0, hold:F.hold||0});
+    toast("Preset saved");
+    return closeSheet();
+  }
+
+  /* void a mis-tap — recorded as a correction, never erased */
+  if(a==="armset"){ ARMED = ARMED===t.dataset.id ? null : t.dataset.id; return render(); }
+  if(a==="voidset"){
+    ev.stopPropagation();
+    const id = t.dataset.id, e = L.events.find(x=>x.id===id);
+    if(e){ e.voided = true; L.events = L.events.filter(x=>x.id!==id); saveLedger(); }
+    ARMED=null; toast("Set removed"); return render();
+  }
+
+  /* library management */
+  if(a==="manage"){ F={s:t.dataset.s}; SHEET=sheetManage; return render(); }
+  if(a==="newex"){ F={s:t.dataset.s, iso:0, bw:0}; SHEET=sheetExDef; return render(); }
+  if(a==="editdef"){
+    const id = t.dataset.ex, m = EX[id];
+    F = {ex:id, n:m.n, g:m.g||"", s:m.s, iso:m.iso?1:0, bw:m.bw?1:0};
+    SHEET = sheetExDef; return render();
+  }
+  if(a==="exmenu"){ F={ex:t.dataset.ex}; SHEET=sheetExMenu; return render(); }
+  if(a==="savedef"){
+    readFields();
+    if(!F.n) return toast("Name it first.", true);
+    const id = F.ex || (F.n.toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,6)+Math.random().toString(36).slice(2,4));
+    const prev = EX[id] || {};
+    append({species:"exdef", ex:id, def:{
+      n:F.n, g:F.g||"", s:F.s||"push", iso:F.iso?1:0, bw:F.bw?1:0,
+      ord: prev.ord ?? (Object.keys(EX).length+1), hidden:0
+    }});
+    toast(F.ex?"Saved":"Added");
+    SCREEN = {v:"split", s:F.s||"push"};
+    return closeSheet();
+  }
+  if(a==="hideex"){
+    const m = EX[F.ex];
+    append({species:"exdef", ex:F.ex, def:Object.assign({}, m, {hidden:1})});
+    toast("Removed from list. History kept.");
+    SCREEN = {v:"split", s:m.s};
+    return closeSheet();
+  }
+  if(a==="mv"){
+    const id = t.dataset.ex, d = Number(t.dataset.d);
+    const ids = inSplit(EX[id].s), i = ids.indexOf(id), j = i+d;
+    if(j<0 || j>=ids.length) return;
+    const a2 = ids[j];
+    const oi = EX[id].ord ?? i, oj = EX[a2].ord ?? j;
+    append({species:"exdef", ex:id,  def:Object.assign({},EX[id], {ord:oj})});
+    append({species:"exdef", ex:a2, def:Object.assign({},EX[a2],{ord:oi})});
+    EX = library();
+    return render();
+  }
+
+  /* data */
+  if(a==="settings"){ F={}; SHEET=sheetSettings; return render(); }
+  if(a==="export"){
+    const blob = new Blob([JSON.stringify(L)], {type:"application/json"});
+    const url = URL.createObjectURL(blob), el = document.createElement("a");
+    el.href = url; el.download = "ledger-"+todayK()+".json"; el.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    return toast("Exported");
+  }
+  if(a==="import"){ document.getElementById("fimp").click(); return; }
+});
+
+/* merge-only import: adds events that are not already present */
+document.addEventListener("change", ev=>{
+  if(ev.target.id!=="fimp" || !ev.target.files[0]) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    try{
+      const p = JSON.parse(fr.result);
+      if(!p || !Array.isArray(p.events)) throw 0;
+      const have = new Set(L.events.map(e=>e.id));
+      let n = 0;
+      p.events.forEach(e=>{ if(!have.has(e.id)){ L.events.push(e); n++; } });
+      L.events.sort((a,b)=>a.ts-b.ts);
+      saveLedger();
+      toast(n+" event"+(n===1?"":"s")+" merged");
+      closeSheet();
+    }catch(e){ toast("That file could not be read.", true); }
+  };
+  fr.readAsText(ev.target.files[0]);
+});
+
+/* keep typed values through re-render */
+document.addEventListener("input", ev=>{
+  const k = ev.target.dataset.k;
+  if(k) F[k] = Number(ev.target.value)||0;
+});
+
+loadLedger();
+render();
+</script>
+</body>
+</html>
