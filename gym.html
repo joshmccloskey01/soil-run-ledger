@@ -80,6 +80,9 @@ button{background:none;border:0;cursor:pointer}
 .today{display:inline-block;margin-top:7px;font-size:11px;font-weight:750;letter-spacing:.09em;
   text-transform:uppercase;color:var(--ok);background:rgba(46,163,107,.13);
   border-radius:6px;padding:3px 7px}
+.avg{display:inline-block;margin-top:7px;margin-left:6px;font-size:11px;font-weight:750;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--mut);
+  background:rgba(127,141,158,.11);border-radius:6px;padding:3px 7px}
 
 .racts{display:flex;flex-direction:column;gap:8px;flex:none;width:98px}
 .qb{border-radius:11px;padding:13px 0;font-size:14.5px;font-weight:800;letter-spacing:.05em;
@@ -378,6 +381,22 @@ const num = v => { const n=Number(v)||0; return Number.isInteger(n)?String(n):St
 const pad = n => String(n).padStart(2,"0");
 function dayKey(ts){ const d=new Date(ts); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
 const todayK = () => dayKey(Date.now());
+
+/* The 7 complete days before today. Noon anchor so DST shifts cannot drop a day. */
+function prev7Keys(){
+  const d = new Date(); d.setHours(12,0,0,0);
+  const s = new Set();
+  for(let i=1;i<=7;i++) s.add(dayKey(d.getTime()-i*864e5));
+  return s;
+}
+/* Mean base sets per day over that window. Load is ignored: a base that was
+   upgraded mid-window still counts as one occurrence. null when nothing is there. */
+function baseAvg7(id){
+  const ks = prev7Keys();
+  let n = 0;
+  setsOf(id).forEach(e=>{ if((e.setkind||"work")==="work" && ks.has(dayKey(e.ts))) n++; });
+  return n ? n/7 : null;
+}
 function clock(ts){
   const d=new Date(ts); let h=d.getHours(); const ap=h<12?"AM":"PM";
   h=h%12||12; return h+":"+pad(d.getMinutes())+" "+ap;
@@ -441,6 +460,7 @@ function viewSplit(s){
     const m = EX[id];
     const pb = presetOf(id,"base"), pe = presetOf(id,"edge");
     const n  = setsOf(id).filter(e=>dayKey(e.ts)===todayK()).length;
+    const av = baseAvg7(id);
     const fig = p => figure(m,p.w,p.reps,p.hold).replace(/<em>/g,'<span class="un">').replace(/<\/em>/g,'</span>');
 
     h += '<div class="row2">'+
@@ -450,6 +470,7 @@ function viewSplit(s){
            '<span class="pv">'+(pb?'<i class="lb">Base</i> '+fig(pb):'<span class="none">No base preset</span>')+'</span>'+
            '<span class="pv">'+(pe?'<i class="le">Edge</i> '+fig(pe):'<span class="none">No edge preset</span>')+'</span>'+
            (n?'<span class="today">'+n+' today</span>':'')+
+           (av!==null?'<span class="avg">'+av.toFixed(1)+' base/d</span>':'')+
          '</button>'+
          '<div class="racts">'+
            '<button class="qb q-base'+(pb?'':' off')+'" data-a="'+(pb?'base':'editpreset')+'" data-k="base" data-ex="'+id+'">Base</button>'+
