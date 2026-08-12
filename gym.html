@@ -15,6 +15,7 @@
   --bg:#05080c; --surf:#0e141c; --surf2:#151d28; --line:#1f2a37;
   --tx:#eef2f7; --mut:#7f8d9e; --dim:#4a5765;
   --push:#1656c9; --pull:#a8322c; --legs:#176b45; --cardio:#5a3f9e; --isom:#0f6470;
+  --yoga:#8a5a18;
   --ok:#2ea36b;
   --r:14px;
   --safe-b:env(safe-area-inset-bottom,0px);
@@ -62,6 +63,7 @@ button{background:none;border:0;cursor:pointer}
 .c-push{background:var(--push)} .c-pull{background:var(--pull)} .c-legs{background:var(--legs)}
 .c-cardio{background:var(--cardio)}
 .c-isom{background:var(--isom)}
+.c-yoga{background:var(--yoga)}
 
 /* ── exercise list ───────────────────────────────────── */
 .list{display:flex;flex-direction:column;gap:9px}
@@ -336,10 +338,28 @@ const EX_SEED = {
   dsi:{n:"Deep squat hold",s:"isom",g:"Knee",iso:1,bw:1},
   hei:{n:"Hip extension hold",s:"isom",g:"Hip",iso:1,bw:1},
   spi:{n:"Side plank",s:"isom",g:"Trunk",iso:1,bw:1},
-  hbi:{n:"Hollow body",s:"isom",g:"Trunk",iso:1,bw:1}
+  hbi:{n:"Hollow body",s:"isom",g:"Trunk",iso:1,bw:1},
+
+  /* Yoga — held postures, logged in seconds like any other isometric.
+     Bilateral poses are one entry; log each side as its own set. */
+  dds:{n:"Downward dog",s:"yoga",g:"Full body",iso:1,bw:1},
+  lug:{n:"Low lunge",s:"yoga",g:"Hip flexor",iso:1,bw:1},
+  liz:{n:"Lizard",s:"yoga",g:"Hip",iso:1,bw:1},
+  hsp:{n:"Half split",s:"yoga",g:"Hamstring",iso:1,bw:1},
+  wr2:{n:"Warrior II",s:"yoga",g:"Standing",iso:1,bw:1},
+  tri:{n:"Triangle",s:"yoga",g:"Standing",iso:1,bw:1},
+  chr:{n:"Chair",s:"yoga",g:"Standing",iso:1,bw:1},
+  tre:{n:"Tree",s:"yoga",g:"Balance",iso:1,bw:1},
+  pgn:{n:"Pigeon",s:"yoga",g:"Hip",iso:1,bw:1},
+  bda:{n:"Bound angle",s:"yoga",g:"Hip",iso:1,bw:1},
+  sff:{n:"Seated forward fold",s:"yoga",g:"Hamstring",iso:1,bw:1},
+  cob:{n:"Cobra",s:"yoga",g:"Spine",iso:1,bw:1},
+  stw:{n:"Supine twist",s:"yoga",g:"Spine",iso:1,bw:1},
+  chd:{n:"Child's pose",s:"yoga",g:"Restorative",iso:1,bw:1},
+  lgw:{n:"Legs up the wall",s:"yoga",g:"Restorative",iso:1,bw:1}
 };
-const SPLITS = {push:"Push", pull:"Pull", legs:"Legs", cardio:"Cardio", isom:"Isometrics"};
-const SUBTITLE = {push:"Extension", pull:"Curl / Row", legs:"Lower body", cardio:"Bike", isom:"Held positions"};
+const SPLITS = {push:"Push", pull:"Pull", legs:"Legs", cardio:"Cardio", isom:"Isometrics", yoga:"Yoga"};
+const SUBTITLE = {push:"Extension", pull:"Curl / Row", legs:"Lower body", cardio:"Bike", isom:"Held positions", yoga:"Held postures"};
 
 /* User edits/additions ride as append-only `exdef` events; latest wins. */
 function library(){
@@ -472,7 +492,7 @@ function viewHome(){
   let h = '<div class="bar"><h1>Gym</h1>'+
           '<button class="icon" data-a="settings" aria-label="Settings">&#9881;</button></div>'+
           '<div class="wrap"><div class="cats">';
-  ["push","pull","legs","cardio","isom"].forEach(s=>{
+  ["push","pull","legs","cardio","isom","yoga"].forEach(s=>{
     h += '<button class="cat c-'+s+'" data-a="split" data-s="'+s+'">'+
          '<b>'+SPLITS[s].toUpperCase()+'</b><span>'+SUBTITLE[s]+'</span></button>';
   });
