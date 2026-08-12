@@ -328,7 +328,7 @@ const EX_SEED = {
   tib:{n:"Banded tibialis raise",s:"legs",g:"Lower leg"},
   bce:{n:"Banded calf extension",s:"legs",g:"Lower leg"},
   pis:{n:"Pistol squat (probe)",s:"legs",g:"Knee",bw:1},
-  rbk:{n:"Recumbent bike",s:"cardio",g:"Bike",lvl:1,dur:1,hr:1},
+  rbk:{n:"Recumbent bike",s:"cardio",g:"Bike",lvl:1,dur:1,mi:1,hr:1},
 
   hng:{n:"Hang",s:"isom",g:"Shoulder",iso:1,bw:1},
   ssi:{n:"Split squat hold",s:"isom",g:"Knee",iso:1,bw:1},
@@ -390,15 +390,23 @@ function voidedIds(){
 let VOIDED = new Set();
 const setsOf = id => obsOf("set").filter(e=>e.ex===id && !VOIDED.has(e.id)).sort((a,b)=>b.ts-a.ts);
 
-function figure(m, w, reps, hold, hr){
+function figure(m, w, reps, hold, hr, mi){
   const load = m.lvl ? "L"+num(w)
              : (Number(w)===0 && m.bw) ? "BW"
              : num(w)+"<em> lb</em>";
-  const right = m.dur ? num(hold)+"<em> min</em>"
-              : m.iso ? num(hold)+"<em> s</em>"
-              : num(reps)+"<em> reps</em>";
-  const beat = (m.hr && Number(hr)>0) ? ' <em>&middot;</em> '+num(hr)+'<em> bpm</em>' : '';
-  return load+' <em>×</em> '+right+beat;
+  const dot = t => ' <em>&middot;</em> '+t;
+  const miT = num(mi)+"<em> mi</em>", minT = num(hold)+"<em> min</em>";
+  let right, tail = "";
+  if(m.mi || m.dur){
+    /* Whichever of distance and time was actually entered leads; a zero is not shown. */
+    const hasMi = m.mi && Number(mi)>0, hasMin = m.dur && Number(hold)>0;
+    right = hasMi ? miT : hasMin ? minT : (m.mi ? miT : minT);
+    if(hasMi && hasMin) tail += dot(minT);
+  } else {
+    right = m.iso ? num(hold)+"<em> s</em>" : num(reps)+"<em> reps</em>";
+  }
+  if(m.hr && Number(hr)>0) tail += dot(num(hr)+'<em> bpm</em>');
+  return load+' <em>×</em> '+right+tail;
 }
 const num = v => { const n=Number(v)||0; return Number.isInteger(n)?String(n):String(n); };
 
@@ -486,7 +494,7 @@ function viewSplit(s){
     const pb = presetOf(id,"base"), pe = presetOf(id,"edge");
     const n  = setsOf(id).filter(e=>dayKey(e.ts)===todayK()).length;
     const av = baseAvg7(id);
-    const fig = p => figure(m,p.w,p.reps,p.hold,p.hr).replace(/<em>/g,'<span class="un">').replace(/<\/em>/g,'</span>');
+    const fig = p => figure(m,p.w,p.reps,p.hold,p.hr,p.mi).replace(/<em>/g,'<span class="un">').replace(/<\/em>/g,'</span>');
 
     h += '<div class="row2">'+
          '<button class="rmain" data-a="ex" data-ex="'+id+'">'+
@@ -514,7 +522,7 @@ function viewExercise(id){
   const all = setsOf(id);
   const today = all.filter(e=>dayKey(e.ts)===todayK());
 
-  const plain = p => p ? figure(m,p.w,p.reps,p.hold,p.hr).replace(/<\/?em>/g,"") : null;
+  const plain = p => p ? figure(m,p.w,p.reps,p.hold,p.hr,p.mi).replace(/<\/?em>/g,"") : null;
 
   let h = '<div class="bar"><button class="back" data-a="split" data-s="'+m.s+'" aria-label="Back">&#8249;</button>'+
           '<div class="exhd"><b>'+esc(m.n)+'</b>'+(m.g?'<span>'+esc(m.g)+'</span>':'')+'</div>'+
@@ -532,7 +540,7 @@ function viewExercise(id){
   /* current preset */
   h += '<div class="plab">Current preset</div>'+
        '<div class="preset"><div class="fig">'+
-       (pb ? figure(m,pb.w,pb.reps,pb.hold,pb.hr) : '<em style="font-size:.62em">Not set</em>')+
+       (pb ? figure(m,pb.w,pb.reps,pb.hold,pb.hr,pb.mi) : '<em style="font-size:.62em">Not set</em>')+
        '</div><button class="edit" data-a="editpreset" data-k="base" data-ex="'+id+'">'+(pb?"Edit":"Set")+'</button></div>';
 
   /* the three actions */
@@ -576,7 +584,7 @@ function setRow(m,e){
   return '<div class="set '+esc(k)+(armed?" on":"")+'" data-a="armset" data-id="'+e.id+'">'+
          '<span class="tick">&#10003;</span>'+
          '<span class="tm">'+clock(e.ts)+'</span>'+
-         '<span class="fg">'+figure(m,e.w,e.reps,e.hold,e.hr)+
+         '<span class="fg">'+figure(m,e.w,e.reps,e.hold,e.hr,e.mi)+
            (e.v?' <span class="vtag">'+esc(e.v)+'</span>':'')+'</span>'+
          (k!=="work"?'<span class="tag">'+esc(k)+'</span>':'')+
          (armed?'<button class="del" data-a="voidset" data-id="'+e.id+'">Void</button>':'')+
@@ -599,7 +607,7 @@ function stepper(key,label,unit,step){
 
 function sheetSet(){
   const m = EX[F.ex];
-  const plain = p => figure(m,p.w,p.reps,p.hold,p.hr).replace(/<\/?em>/g,"");
+  const plain = p => figure(m,p.w,p.reps,p.hold,p.hr,p.mi).replace(/<\/?em>/g,"");
   const pb = presetOf(F.ex,"base"), pe = presetOf(F.ex,"edge");
 
   const cv = curVar(F.ex);
@@ -617,7 +625,8 @@ function sheetSet(){
 
   h += m.lvl ? stepper("w","Difficulty (1–16)","",1)
              : stepper("w", m.bw?"Load (lb · 0 = bodyweight)":"Load (lb)","lb",5);
-  h += m.dur ? stepper("hold","Duration","min",1)
+  if(m.mi) h += stepper("mi","Distance","mi",0.1);
+  h += m.dur ? stepper("hold","Time","min",1)
      : m.iso ? stepper("hold","Hold","s",5)
              : stepper("reps","Reps","",1);
   if(m.hr) h += stepper("hr","Working heart rate (estimate)","bpm",5);
@@ -643,7 +652,7 @@ function sheetSet(){
       const k = e.pkind||"base";
       h += '<div class="set '+(k==="edge"?"edge":"work")+'">'+
            '<span class="tag '+(k==="edge"?"te":"tb")+'">'+k+'</span>'+
-           '<span class="fg">'+figure(m,e.w,e.reps,e.hold,e.hr)+'</span>'+
+           '<span class="fg">'+figure(m,e.w,e.reps,e.hold,e.hr,e.mi)+'</span>'+
            '<span class="tm" style="margin-left:auto;width:auto">'+esc(dayLabel(dayKey(e.ts)))+'</span></div>';
     });
   }
@@ -666,7 +675,7 @@ function sheetExDef(){
               ((F.s||"push")===k)+'">'+SPLITS[k]+'</button>').join("")+
           '</div></div>'+
           '<div class="fld"><label>Measured in</label><div class="segs">'+
-            [["reps","Reps"],["hold","Hold (s)"],["cardio","Level &times; min"]].map(v=>
+            [["reps","Reps"],["hold","Hold (s)"],["cardio","Cardio"]].map(v=>
               '<button class="seg" data-a="meas" data-v="'+v[0]+'" aria-pressed="'+(meas===v[0])+'">'+v[1]+'</button>').join("")+
           '</div></div>';
   h += '<div class="fld"><label>Heart rate field</label><div class="segs">'+
@@ -747,7 +756,7 @@ const buzz = ms => { try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){
 function closeSheet(){ SHEET=null; F={}; render(); }
 
 function readFields(){
-  ["w","reps","hold","hr"].forEach(k=>{
+  ["w","reps","hold","hr","mi"].forEach(k=>{
     const el = document.getElementById("f_"+k);
     if(el) F[k] = Number(el.value)||0;
   });
@@ -784,21 +793,21 @@ document.addEventListener("click", ev=>{
     if(!p) return;
     window.__sy = window.scrollY;
     const ok = append({species:"observation", kind:"set", ex:id, v:curVar(id),
-                       w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0,
+                       w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0, mi:p.mi||0,
                        setkind:(a==="edge"?"edge":"work"), unit:"lb"});
     if(ok){ buzz(a==="edge"?24:14); toast(a.toUpperCase()+" recorded · "+clock(ok.ts)); render(); }
     return;
   }
 
   if(a==="addset"){
-    const id = t.dataset.ex, p = presetOf(id) || {w:0,reps:0,hold:0,hr:0};
-    F = {ex:id, mode:"set", w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0, setkind:"work"};
+    const id = t.dataset.ex, p = presetOf(id) || {w:0,reps:0,hold:0,hr:0,mi:0};
+    F = {ex:id, mode:"set", w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0, mi:p.mi||0, setkind:"work"};
     SHEET = sheetSet; return render();
   }
   if(a==="editpreset"){
     const id = t.dataset.ex, k = t.dataset.k || "base";
-    const p = presetOf(id,k) || presetOf(id,"base") || {w:0,reps:0,hold:0,hr:0};
-    F = {ex:id, mode:"preset", pkind:k, w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0};
+    const p = presetOf(id,k) || presetOf(id,"base") || {w:0,reps:0,hold:0,hr:0,mi:0};
+    F = {ex:id, mode:"preset", pkind:k, w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0, mi:p.mi||0};
     SHEET = sheetSet; return render();
   }
 
@@ -819,11 +828,13 @@ document.addEventListener("click", ev=>{
   if(a==="saveset"){
     readFields();
     const m = EX[F.ex];
-    const timed = !!(m.iso || m.dur);
-    if(!timed && !F.reps){ return toast("Reps is 0. Nothing to record.", true); }
-    if(timed && !F.hold){ return toast((m.dur?"Duration":"Hold")+" is 0. Nothing to record.", true); }
+    if(m.mi || m.dur){
+      if(!F.mi && !F.hold) return toast("Set a distance or a time.", true);
+    } else if(m.iso){
+      if(!F.hold) return toast("Hold is 0. Nothing to record.", true);
+    } else if(!F.reps){ return toast("Reps is 0. Nothing to record.", true); }
     const ok = append({species:"observation", kind:"set", ex:F.ex, v:curVar(F.ex),
-                       w:F.w||0, reps:F.reps||0, hold:F.hold||0, hr:F.hr||0,
+                       w:F.w||0, reps:F.reps||0, hold:F.hold||0, hr:F.hr||0, mi:F.mi||0,
                        setkind:F.setkind||"work", unit:"lb"});
     if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); }
     return closeSheet();
@@ -831,11 +842,13 @@ document.addEventListener("click", ev=>{
   if(a==="savepreset"){
     readFields();
     const m = EX[F.ex], k = t.dataset.k || "base";
-    const timed = !!(m.iso || m.dur);
-    if(!timed && !F.reps){ return toast("Reps is 0. Set a value.", true); }
-    if(timed && !F.hold){ return toast((m.dur?"Duration":"Hold")+" is 0. Set a value.", true); }
+    if(m.mi || m.dur){
+      if(!F.mi && !F.hold) return toast("Set a distance or a time.", true);
+    } else if(m.iso){
+      if(!F.hold) return toast("Hold is 0. Set a value.", true);
+    } else if(!F.reps){ return toast("Reps is 0. Set a value.", true); }
     append({species:"preset", ex:F.ex, pkind:k, v:curVar(F.ex),
-            w:F.w||0, reps:F.reps||0, hold:F.hold||0, hr:F.hr||0, unit:"lb"});
+            w:F.w||0, reps:F.reps||0, hold:F.hold||0, hr:F.hr||0, mi:F.mi||0, unit:"lb"});
     buzz(12);
     toast((k==="edge"?"Edge":"Base")+" preset saved · "+(m.lvl?"L"+(F.w||0):(F.w||0)+" lb"));
     F.pkind = k;
@@ -868,7 +881,7 @@ document.addEventListener("click", ev=>{
     const meas = F.meas || "reps", card = meas==="cardio";
     append({species:"exdef", ex:id, def:{
       n:F.n, g:F.g||"", s:F.s||"push",
-      iso: meas==="hold"?1:0, lvl: card?1:0, dur: card?1:0,
+      iso: meas==="hold"?1:0, lvl: card?1:0, dur: card?1:0, mi: card?1:0,
       bw: card?0:(F.bw?1:0), hr: F.hr?1:0,
       ord: prev.ord ?? (Object.keys(EX).length+1), hidden:0
     }});
