@@ -14,7 +14,7 @@
 :root{
   --bg:#05080c; --surf:#0e141c; --surf2:#151d28; --line:#1f2a37;
   --tx:#eef2f7; --mut:#7f8d9e; --dim:#4a5765;
-  --push:#1656c9; --pull:#a8322c; --legs:#176b45; --cardio:#5a3f9e;
+  --push:#1656c9; --pull:#a8322c; --legs:#176b45; --cardio:#5a3f9e; --isom:#0f6470;
   --ok:#2ea36b;
   --r:14px;
   --safe-b:env(safe-area-inset-bottom,0px);
@@ -61,6 +61,7 @@ button{background:none;border:0;cursor:pointer}
 .cat span{font-size:14px;font-weight:600;color:rgba(255,255,255,.62);letter-spacing:.02em}
 .c-push{background:var(--push)} .c-pull{background:var(--pull)} .c-legs{background:var(--legs)}
 .c-cardio{background:var(--cardio)}
+.c-isom{background:var(--isom)}
 
 /* ── exercise list ───────────────────────────────────── */
 .list{display:flex;flex-direction:column;gap:9px}
@@ -327,10 +328,18 @@ const EX_SEED = {
   tib:{n:"Banded tibialis raise",s:"legs",g:"Lower leg"},
   bce:{n:"Banded calf extension",s:"legs",g:"Lower leg"},
   pis:{n:"Pistol squat (probe)",s:"legs",g:"Knee",bw:1},
-  rbk:{n:"Recumbent bike",s:"cardio",g:"Bike",lvl:1,dur:1}
+  rbk:{n:"Recumbent bike",s:"cardio",g:"Bike",lvl:1,dur:1,hr:1},
+
+  hng:{n:"Hang",s:"isom",g:"Shoulder",iso:1,bw:1},
+  ssi:{n:"Split squat hold",s:"isom",g:"Knee",iso:1,bw:1},
+  gbi:{n:"Glute bridge hold",s:"isom",g:"Hip",iso:1,bw:1},
+  dsi:{n:"Deep squat hold",s:"isom",g:"Knee",iso:1,bw:1},
+  hei:{n:"Hip extension hold",s:"isom",g:"Hip",iso:1,bw:1},
+  spi:{n:"Side plank",s:"isom",g:"Trunk",iso:1,bw:1},
+  hbi:{n:"Hollow body",s:"isom",g:"Trunk",iso:1,bw:1}
 };
-const SPLITS = {push:"Push", pull:"Pull", legs:"Legs", cardio:"Cardio"};
-const SUBTITLE = {push:"Extension", pull:"Curl / Row", legs:"Lower body", cardio:"Bike"};
+const SPLITS = {push:"Push", pull:"Pull", legs:"Legs", cardio:"Cardio", isom:"Isometrics"};
+const SUBTITLE = {push:"Extension", pull:"Curl / Row", legs:"Lower body", cardio:"Bike", isom:"Held positions"};
 
 /* User edits/additions ride as append-only `exdef` events; latest wins. */
 function library(){
@@ -381,14 +390,15 @@ function voidedIds(){
 let VOIDED = new Set();
 const setsOf = id => obsOf("set").filter(e=>e.ex===id && !VOIDED.has(e.id)).sort((a,b)=>b.ts-a.ts);
 
-function figure(m, w, reps, hold){
+function figure(m, w, reps, hold, hr){
   const load = m.lvl ? "L"+num(w)
              : (Number(w)===0 && m.bw) ? "BW"
              : num(w)+"<em> lb</em>";
   const right = m.dur ? num(hold)+"<em> min</em>"
               : m.iso ? num(hold)+"<em> s</em>"
               : num(reps)+"<em> reps</em>";
-  return load+' <em>×</em> '+right;
+  const beat = (m.hr && Number(hr)>0) ? ' <em>&middot;</em> '+num(hr)+'<em> bpm</em>' : '';
+  return load+' <em>×</em> '+right+beat;
 }
 const num = v => { const n=Number(v)||0; return Number.isInteger(n)?String(n):String(n); };
 
@@ -454,7 +464,7 @@ function viewHome(){
   let h = '<div class="bar"><h1>Gym</h1>'+
           '<button class="icon" data-a="settings" aria-label="Settings">&#9881;</button></div>'+
           '<div class="wrap"><div class="cats">';
-  ["push","pull","legs","cardio"].forEach(s=>{
+  ["push","pull","legs","cardio","isom"].forEach(s=>{
     h += '<button class="cat c-'+s+'" data-a="split" data-s="'+s+'">'+
          '<b>'+SPLITS[s].toUpperCase()+'</b><span>'+SUBTITLE[s]+'</span></button>';
   });
@@ -476,7 +486,7 @@ function viewSplit(s){
     const pb = presetOf(id,"base"), pe = presetOf(id,"edge");
     const n  = setsOf(id).filter(e=>dayKey(e.ts)===todayK()).length;
     const av = baseAvg7(id);
-    const fig = p => figure(m,p.w,p.reps,p.hold).replace(/<em>/g,'<span class="un">').replace(/<\/em>/g,'</span>');
+    const fig = p => figure(m,p.w,p.reps,p.hold,p.hr).replace(/<em>/g,'<span class="un">').replace(/<\/em>/g,'</span>');
 
     h += '<div class="row2">'+
          '<button class="rmain" data-a="ex" data-ex="'+id+'">'+
@@ -504,7 +514,7 @@ function viewExercise(id){
   const all = setsOf(id);
   const today = all.filter(e=>dayKey(e.ts)===todayK());
 
-  const plain = p => p ? figure(m,p.w,p.reps,p.hold).replace(/<\/?em>/g,"") : null;
+  const plain = p => p ? figure(m,p.w,p.reps,p.hold,p.hr).replace(/<\/?em>/g,"") : null;
 
   let h = '<div class="bar"><button class="back" data-a="split" data-s="'+m.s+'" aria-label="Back">&#8249;</button>'+
           '<div class="exhd"><b>'+esc(m.n)+'</b>'+(m.g?'<span>'+esc(m.g)+'</span>':'')+'</div>'+
@@ -522,7 +532,7 @@ function viewExercise(id){
   /* current preset */
   h += '<div class="plab">Current preset</div>'+
        '<div class="preset"><div class="fig">'+
-       (pb ? figure(m,pb.w,pb.reps,pb.hold) : '<em style="font-size:.62em">Not set</em>')+
+       (pb ? figure(m,pb.w,pb.reps,pb.hold,pb.hr) : '<em style="font-size:.62em">Not set</em>')+
        '</div><button class="edit" data-a="editpreset" data-k="base" data-ex="'+id+'">'+(pb?"Edit":"Set")+'</button></div>';
 
   /* the three actions */
@@ -566,7 +576,7 @@ function setRow(m,e){
   return '<div class="set '+esc(k)+(armed?" on":"")+'" data-a="armset" data-id="'+e.id+'">'+
          '<span class="tick">&#10003;</span>'+
          '<span class="tm">'+clock(e.ts)+'</span>'+
-         '<span class="fg">'+figure(m,e.w,e.reps,e.hold)+
+         '<span class="fg">'+figure(m,e.w,e.reps,e.hold,e.hr)+
            (e.v?' <span class="vtag">'+esc(e.v)+'</span>':'')+'</span>'+
          (k!=="work"?'<span class="tag">'+esc(k)+'</span>':'')+
          (armed?'<button class="del" data-a="voidset" data-id="'+e.id+'">Void</button>':'')+
@@ -589,7 +599,7 @@ function stepper(key,label,unit,step){
 
 function sheetSet(){
   const m = EX[F.ex];
-  const plain = p => figure(m,p.w,p.reps,p.hold).replace(/<\/?em>/g,"");
+  const plain = p => figure(m,p.w,p.reps,p.hold,p.hr).replace(/<\/?em>/g,"");
   const pb = presetOf(F.ex,"base"), pe = presetOf(F.ex,"edge");
 
   const cv = curVar(F.ex);
@@ -610,6 +620,7 @@ function sheetSet(){
   h += m.dur ? stepper("hold","Duration","min",1)
      : m.iso ? stepper("hold","Hold","s",5)
              : stepper("reps","Reps","",1);
+  if(m.hr) h += stepper("hr","Working heart rate (estimate)","bpm",5);
 
   if(F.mode==="set"){
     h += '<div class="fld"><label>Kind</label><div class="segs">'+
@@ -632,7 +643,7 @@ function sheetSet(){
       const k = e.pkind||"base";
       h += '<div class="set '+(k==="edge"?"edge":"work")+'">'+
            '<span class="tag '+(k==="edge"?"te":"tb")+'">'+k+'</span>'+
-           '<span class="fg">'+figure(m,e.w,e.reps,e.hold)+'</span>'+
+           '<span class="fg">'+figure(m,e.w,e.reps,e.hold,e.hr)+'</span>'+
            '<span class="tm" style="margin-left:auto;width:auto">'+esc(dayLabel(dayKey(e.ts)))+'</span></div>';
     });
   }
@@ -658,6 +669,10 @@ function sheetExDef(){
             [["reps","Reps"],["hold","Hold (s)"],["cardio","Level &times; min"]].map(v=>
               '<button class="seg" data-a="meas" data-v="'+v[0]+'" aria-pressed="'+(meas===v[0])+'">'+v[1]+'</button>').join("")+
           '</div></div>';
+  h += '<div class="fld"><label>Heart rate field</label><div class="segs">'+
+       [[0,"Off"],[1,"On"]].map(v=>
+         '<button class="seg" data-a="hrf" data-v="'+v[0]+'" aria-pressed="'+((F.hr?1:0)===v[0])+'">'+v[1]+'</button>').join("")+
+       '</div></div>';
   if(meas!=="cardio"){
     h += '<div class="fld"><label>Loaded by</label><div class="segs">'+
          [[0,"External weight"],[1,"Bodyweight"]].map(v=>
@@ -732,7 +747,7 @@ const buzz = ms => { try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){
 function closeSheet(){ SHEET=null; F={}; render(); }
 
 function readFields(){
-  ["w","reps","hold"].forEach(k=>{
+  ["w","reps","hold","hr"].forEach(k=>{
     const el = document.getElementById("f_"+k);
     if(el) F[k] = Number(el.value)||0;
   });
@@ -769,21 +784,21 @@ document.addEventListener("click", ev=>{
     if(!p) return;
     window.__sy = window.scrollY;
     const ok = append({species:"observation", kind:"set", ex:id, v:curVar(id),
-                       w:p.w, reps:p.reps||0, hold:p.hold||0,
+                       w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0,
                        setkind:(a==="edge"?"edge":"work"), unit:"lb"});
     if(ok){ buzz(a==="edge"?24:14); toast(a.toUpperCase()+" recorded · "+clock(ok.ts)); render(); }
     return;
   }
 
   if(a==="addset"){
-    const id = t.dataset.ex, p = presetOf(id) || {w:0,reps:0,hold:0};
-    F = {ex:id, mode:"set", w:p.w, reps:p.reps||0, hold:p.hold||0, setkind:"work"};
+    const id = t.dataset.ex, p = presetOf(id) || {w:0,reps:0,hold:0,hr:0};
+    F = {ex:id, mode:"set", w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0, setkind:"work"};
     SHEET = sheetSet; return render();
   }
   if(a==="editpreset"){
     const id = t.dataset.ex, k = t.dataset.k || "base";
-    const p = presetOf(id,k) || presetOf(id,"base") || {w:0,reps:0,hold:0};
-    F = {ex:id, mode:"preset", pkind:k, w:p.w, reps:p.reps||0, hold:p.hold||0};
+    const p = presetOf(id,k) || presetOf(id,"base") || {w:0,reps:0,hold:0,hr:0};
+    F = {ex:id, mode:"preset", pkind:k, w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0};
     SHEET = sheetSet; return render();
   }
 
@@ -798,6 +813,7 @@ document.addEventListener("click", ev=>{
   if(a==="cat"){ readFields(); F.s = t.dataset.v; return render(); }
   if(a==="iso"){ readFields(); F.iso = Number(t.dataset.v); return render(); }
   if(a==="meas"){ readFields(); F.meas = t.dataset.v; return render(); }
+  if(a==="hrf"){ readFields(); F.hr = Number(t.dataset.v); return render(); }
   if(a==="bw"){ readFields(); F.bw = Number(t.dataset.v); return render(); }
 
   if(a==="saveset"){
@@ -807,7 +823,8 @@ document.addEventListener("click", ev=>{
     if(!timed && !F.reps){ return toast("Reps is 0. Nothing to record.", true); }
     if(timed && !F.hold){ return toast((m.dur?"Duration":"Hold")+" is 0. Nothing to record.", true); }
     const ok = append({species:"observation", kind:"set", ex:F.ex, v:curVar(F.ex),
-                       w:F.w||0, reps:F.reps||0, hold:F.hold||0, setkind:F.setkind||"work", unit:"lb"});
+                       w:F.w||0, reps:F.reps||0, hold:F.hold||0, hr:F.hr||0,
+                       setkind:F.setkind||"work", unit:"lb"});
     if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); }
     return closeSheet();
   }
@@ -818,7 +835,7 @@ document.addEventListener("click", ev=>{
     if(!timed && !F.reps){ return toast("Reps is 0. Set a value.", true); }
     if(timed && !F.hold){ return toast((m.dur?"Duration":"Hold")+" is 0. Set a value.", true); }
     append({species:"preset", ex:F.ex, pkind:k, v:curVar(F.ex),
-            w:F.w||0, reps:F.reps||0, hold:F.hold||0, unit:"lb"});
+            w:F.w||0, reps:F.reps||0, hold:F.hold||0, hr:F.hr||0, unit:"lb"});
     buzz(12);
     toast((k==="edge"?"Edge":"Base")+" preset saved · "+(m.lvl?"L"+(F.w||0):(F.w||0)+" lb"));
     F.pkind = k;
@@ -839,7 +856,7 @@ document.addEventListener("click", ev=>{
   if(a==="newex"){ F={s:t.dataset.s, iso:0, bw:0, meas:"reps"}; SHEET=sheetExDef; return render(); }
   if(a==="editdef"){
     const id = t.dataset.ex, m = EX[id];
-    F = {ex:id, n:m.n, g:m.g||"", s:m.s, iso:m.iso?1:0, bw:m.bw?1:0, meas:measOf(m)};
+    F = {ex:id, n:m.n, g:m.g||"", s:m.s, iso:m.iso?1:0, bw:m.bw?1:0, hr:m.hr?1:0, meas:measOf(m)};
     SHEET = sheetExDef; return render();
   }
   if(a==="exmenu"){ F={ex:t.dataset.ex}; SHEET=sheetExMenu; return render(); }
@@ -852,7 +869,7 @@ document.addEventListener("click", ev=>{
     append({species:"exdef", ex:id, def:{
       n:F.n, g:F.g||"", s:F.s||"push",
       iso: meas==="hold"?1:0, lvl: card?1:0, dur: card?1:0,
-      bw: card?0:(F.bw?1:0),
+      bw: card?0:(F.bw?1:0), hr: F.hr?1:0,
       ord: prev.ord ?? (Object.keys(EX).length+1), hidden:0
     }});
     toast(F.ex?"Saved":"Added");
