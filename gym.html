@@ -14,7 +14,7 @@
 :root{
   --bg:#05080c; --surf:#0e141c; --surf2:#151d28; --line:#1f2a37;
   --tx:#eef2f7; --mut:#7f8d9e; --dim:#4a5765;
-  --push:#1656c9; --pull:#a8322c; --legs:#176b45;
+  --push:#1656c9; --pull:#a8322c; --legs:#176b45; --cardio:#5a3f9e;
   --ok:#2ea36b;
   --r:14px;
   --safe-b:env(safe-area-inset-bottom,0px);
@@ -60,6 +60,7 @@ button{background:none;border:0;cursor:pointer}
 .cat b{display:block;font-size:clamp(40px,13vw,58px);font-weight:850;letter-spacing:-.035em;line-height:.94}
 .cat span{font-size:14px;font-weight:600;color:rgba(255,255,255,.62);letter-spacing:.02em}
 .c-push{background:var(--push)} .c-pull{background:var(--pull)} .c-legs{background:var(--legs)}
+.c-cardio{background:var(--cardio)}
 
 /* ── exercise list ───────────────────────────────────── */
 .list{display:flex;flex-direction:column;gap:9px}
@@ -216,6 +217,15 @@ button{background:none;border:0;cursor:pointer}
 .sub2:active{background:var(--surf2)}
 .danger{color:#c9564c}
 .hint{font-size:13px;color:var(--dim);line-height:1.5;margin:-6px 0 14px}
+.mrow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.mnm{flex:1;min-width:0;text-align:left;padding:14px;border:1px solid var(--line);
+  border-radius:12px;background:var(--bg);font-size:15.5px;font-weight:650;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mnm.off{color:var(--dim)}
+.mv{width:52px;height:50px;flex:none;border:1px solid var(--line);border-radius:12px;
+  background:var(--surf2);font-size:17px;color:var(--tx)}
+.mv.wide{width:auto;padding:0 16px;font-size:14px;font-weight:650;color:var(--mut)}
+.mv[disabled]{opacity:.3}
 .nowline{display:flex;gap:18px;flex-wrap:wrap;background:var(--bg);border:1px solid var(--line);
   border-radius:12px;padding:12px 14px;margin-bottom:18px;font-size:14.5px;font-weight:650}
 .nowline i{font-style:normal;font-weight:750;font-size:11px;letter-spacing:.11em;
@@ -316,10 +326,11 @@ const EX_SEED = {
   cra:{n:"Standing calf raise",s:"legs",g:"Lower leg"},
   tib:{n:"Banded tibialis raise",s:"legs",g:"Lower leg"},
   bce:{n:"Banded calf extension",s:"legs",g:"Lower leg"},
-  pis:{n:"Pistol squat (probe)",s:"legs",g:"Knee",bw:1}
+  pis:{n:"Pistol squat (probe)",s:"legs",g:"Knee",bw:1},
+  rbk:{n:"Recumbent bike",s:"cardio",g:"Bike",lvl:1,dur:1}
 };
-const SPLITS = {push:"Push", pull:"Pull", legs:"Legs"};
-const SUBTITLE = {push:"Extension", pull:"Curl / Row", legs:"Lower body"};
+const SPLITS = {push:"Push", pull:"Pull", legs:"Legs", cardio:"Cardio"};
+const SUBTITLE = {push:"Extension", pull:"Curl / Row", legs:"Lower body", cardio:"Bike"};
 
 /* User edits/additions ride as append-only `exdef` events; latest wins. */
 function library(){
@@ -371,8 +382,12 @@ let VOIDED = new Set();
 const setsOf = id => obsOf("set").filter(e=>e.ex===id && !VOIDED.has(e.id)).sort((a,b)=>b.ts-a.ts);
 
 function figure(m, w, reps, hold){
-  const load = (Number(w)===0 && m.bw) ? "BW" : num(w)+"<em> lb</em>";
-  const right = m.iso ? num(hold)+"<em> s</em>" : num(reps)+"<em> reps</em>";
+  const load = m.lvl ? "L"+num(w)
+             : (Number(w)===0 && m.bw) ? "BW"
+             : num(w)+"<em> lb</em>";
+  const right = m.dur ? num(hold)+"<em> min</em>"
+              : m.iso ? num(hold)+"<em> s</em>"
+              : num(reps)+"<em> reps</em>";
   return load+' <em>×</em> '+right;
 }
 const num = v => { const n=Number(v)||0; return Number.isInteger(n)?String(n):String(n); };
@@ -439,7 +454,7 @@ function viewHome(){
   let h = '<div class="bar"><h1>Gym</h1>'+
           '<button class="icon" data-a="settings" aria-label="Settings">&#9881;</button></div>'+
           '<div class="wrap"><div class="cats">';
-  ["push","pull","legs"].forEach(s=>{
+  ["push","pull","legs","cardio"].forEach(s=>{
     h += '<button class="cat c-'+s+'" data-a="split" data-s="'+s+'">'+
          '<b>'+SPLITS[s].toUpperCase()+'</b><span>'+SUBTITLE[s]+'</span></button>';
   });
@@ -590,8 +605,11 @@ function sheetSet(){
          '</div>';
   }
 
-  h += stepper("w", m.bw?"Load (lb &middot; 0 = bodyweight)":"Load (lb)","lb",5);
-  h += m.iso ? stepper("hold","Hold","s",5) : stepper("reps","Reps","",1);
+  h += m.lvl ? stepper("w","Difficulty (1–16)","",1)
+             : stepper("w", m.bw?"Load (lb · 0 = bodyweight)":"Load (lb)","lb",5);
+  h += m.dur ? stepper("hold","Duration","min",1)
+     : m.iso ? stepper("hold","Hold","s",5)
+             : stepper("reps","Reps","",1);
 
   if(F.mode==="set"){
     h += '<div class="fld"><label>Kind</label><div class="segs">'+
@@ -619,6 +637,72 @@ function sheetSet(){
     });
   }
   return h+'</div>';
+}
+
+function measOf(m){ return m.lvl ? "cardio" : (m.iso ? "hold" : "reps"); }
+
+/* Movement definition — create or edit. */
+function sheetExDef(){
+  const meas = F.meas || "reps";
+  let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
+          '<div class="grab"></div><h3>'+(F.ex?"Edit movement":"New movement")+'</h3>'+
+          '<div class="fld"><label>Name</label>'+
+            '<input id="f_n" class="tin" type="text" value="'+esc(F.n||"")+'" placeholder="Recumbent bike"></div>'+
+          '<div class="fld"><label>Group</label>'+
+            '<input id="f_g" class="tin" type="text" value="'+esc(F.g||"")+'" placeholder="Bike"></div>'+
+          '<div class="fld"><label>Category</label><div class="segs">'+
+            Object.keys(SPLITS).map(k=>'<button class="seg" data-a="cat" data-v="'+k+'" aria-pressed="'+
+              ((F.s||"push")===k)+'">'+SPLITS[k]+'</button>').join("")+
+          '</div></div>'+
+          '<div class="fld"><label>Measured in</label><div class="segs">'+
+            [["reps","Reps"],["hold","Hold (s)"],["cardio","Level &times; min"]].map(v=>
+              '<button class="seg" data-a="meas" data-v="'+v[0]+'" aria-pressed="'+(meas===v[0])+'">'+v[1]+'</button>').join("")+
+          '</div></div>';
+  if(meas!=="cardio"){
+    h += '<div class="fld"><label>Loaded by</label><div class="segs">'+
+         [[0,"External weight"],[1,"Bodyweight"]].map(v=>
+           '<button class="seg" data-a="bw" data-v="'+v[0]+'" aria-pressed="'+((F.bw?1:0)===v[0])+'">'+v[1]+'</button>').join("")+
+         '</div></div>';
+  }
+  return h + '<button class="save c-push" data-a="savedef">'+(F.ex?"Save":"Add movement")+'</button>'+
+             '<button class="sub2" data-a="close">Cancel</button></div>';
+}
+
+/* Reorder, edit, restore. Nothing is deleted; hiding is reversible. */
+function sheetManage(){
+  const s = F.s, ids = inSplit(s);
+  const hid = Object.keys(EX).filter(k=>EX[k].s===s && EX[k].hidden)
+                             .sort((a,b)=>(EX[a].ord??900)-(EX[b].ord??900));
+  let h = '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
+          '<div class="grab"></div><h3>'+esc(SPLITS[s])+' list</h3>'+
+          '<div class="hint">Order the list, or open a movement to rename it. Removing only hides it &mdash; every recorded set stays in the ledger.</div>';
+  ids.forEach((id,i)=>{
+    h += '<div class="mrow">'+
+         '<button class="mnm" data-a="editdef" data-ex="'+id+'">'+esc(EX[id].n)+'</button>'+
+         '<button class="mv"'+(i===0?' disabled':'')+' data-a="mv" data-ex="'+id+'" data-d="-1" aria-label="Move up">&#8593;</button>'+
+         '<button class="mv"'+(i===ids.length-1?' disabled':'')+' data-a="mv" data-ex="'+id+'" data-d="1" aria-label="Move down">&#8595;</button>'+
+         '</div>';
+  });
+  if(hid.length){
+    h += '<div class="sect"><h2>Removed</h2></div>';
+    hid.forEach(id=>{
+      h += '<div class="mrow"><span class="mnm off">'+esc(EX[id].n)+'</span>'+
+           '<button class="mv wide" data-a="showex" data-ex="'+id+'">Restore</button></div>';
+    });
+  }
+  return h + '<button class="sub2" data-a="close">Done</button></div>';
+}
+
+/* Per-movement menu, opened from the exercise screen. */
+function sheetExMenu(){
+  const m = EX[F.ex];
+  if(!m) return '';
+  return '<div class="scrim" data-a="close"></div><div class="sheet" role="dialog" aria-modal="true">'+
+    '<div class="grab"></div><h3>'+esc(m.n)+'</h3>'+
+    '<button class="sub2" data-a="editdef" data-ex="'+F.ex+'">Edit movement</button>'+
+    '<button class="sub2 danger" data-a="hideex">Remove from list</button>'+
+    '<div class="hint">Removing hides it from the list. The sets it holds stay in the record.</div>'+
+    '<button class="sub2" data-a="close">Cancel</button></div>';
 }
 
 function sheetSettings(){
@@ -654,6 +738,12 @@ function readFields(){
   });
   const n = document.getElementById("f_n"); if(n) F.n = n.value.trim();
   const g = document.getElementById("f_g"); if(g) F.g = g.value.trim();
+  clampLevel();
+}
+/* Difficulty is a dial position, not a load: 1..16, whole numbers only. */
+function clampLevel(){
+  const m = EX[F.ex];
+  if(m && m.lvl) F.w = Math.min(16, Math.max(1, Math.round(Number(F.w)||1)));
 }
 
 document.addEventListener("click", ev=>{
@@ -701,18 +791,21 @@ document.addEventListener("click", ev=>{
     readFields();
     const k = t.dataset.k, st = Number(t.dataset.st);
     F[k] = Math.max(0, Math.round(((F[k]||0) + (a==="inc"?st:-st))*100)/100);
+    if(k==="w") clampLevel();
     return render();
   }
   if(a==="kind"){ readFields(); F.setkind = t.dataset.v; return render(); }
   if(a==="cat"){ readFields(); F.s = t.dataset.v; return render(); }
   if(a==="iso"){ readFields(); F.iso = Number(t.dataset.v); return render(); }
+  if(a==="meas"){ readFields(); F.meas = t.dataset.v; return render(); }
   if(a==="bw"){ readFields(); F.bw = Number(t.dataset.v); return render(); }
 
   if(a==="saveset"){
     readFields();
     const m = EX[F.ex];
-    if(!m.iso && !F.reps){ return toast("Reps is 0. Nothing to record.", true); }
-    if(m.iso && !F.hold){ return toast("Hold is 0. Nothing to record.", true); }
+    const timed = !!(m.iso || m.dur);
+    if(!timed && !F.reps){ return toast("Reps is 0. Nothing to record.", true); }
+    if(timed && !F.hold){ return toast((m.dur?"Duration":"Hold")+" is 0. Nothing to record.", true); }
     const ok = append({species:"observation", kind:"set", ex:F.ex, v:curVar(F.ex),
                        w:F.w||0, reps:F.reps||0, hold:F.hold||0, setkind:F.setkind||"work", unit:"lb"});
     if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); }
@@ -721,12 +814,13 @@ document.addEventListener("click", ev=>{
   if(a==="savepreset"){
     readFields();
     const m = EX[F.ex], k = t.dataset.k || "base";
-    if(!m.iso && !F.reps){ return toast("Reps is 0. Set a value.", true); }
-    if(m.iso && !F.hold){ return toast("Hold is 0. Set a value.", true); }
+    const timed = !!(m.iso || m.dur);
+    if(!timed && !F.reps){ return toast("Reps is 0. Set a value.", true); }
+    if(timed && !F.hold){ return toast((m.dur?"Duration":"Hold")+" is 0. Set a value.", true); }
     append({species:"preset", ex:F.ex, pkind:k, v:curVar(F.ex),
             w:F.w||0, reps:F.reps||0, hold:F.hold||0, unit:"lb"});
     buzz(12);
-    toast((k==="edge"?"Edge":"Base")+" preset saved · "+F.w+" lb");
+    toast((k==="edge"?"Edge":"Base")+" preset saved · "+(m.lvl?"L"+(F.w||0):(F.w||0)+" lb"));
     F.pkind = k;
     return render();
   }
@@ -742,10 +836,10 @@ document.addEventListener("click", ev=>{
 
   /* library management */
   if(a==="manage"){ F={s:t.dataset.s}; SHEET=sheetManage; return render(); }
-  if(a==="newex"){ F={s:t.dataset.s, iso:0, bw:0}; SHEET=sheetExDef; return render(); }
+  if(a==="newex"){ F={s:t.dataset.s, iso:0, bw:0, meas:"reps"}; SHEET=sheetExDef; return render(); }
   if(a==="editdef"){
     const id = t.dataset.ex, m = EX[id];
-    F = {ex:id, n:m.n, g:m.g||"", s:m.s, iso:m.iso?1:0, bw:m.bw?1:0};
+    F = {ex:id, n:m.n, g:m.g||"", s:m.s, iso:m.iso?1:0, bw:m.bw?1:0, meas:measOf(m)};
     SHEET = sheetExDef; return render();
   }
   if(a==="exmenu"){ F={ex:t.dataset.ex}; SHEET=sheetExMenu; return render(); }
@@ -754,8 +848,11 @@ document.addEventListener("click", ev=>{
     if(!F.n) return toast("Name it first.", true);
     const id = F.ex || (F.n.toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,6)+Math.random().toString(36).slice(2,4));
     const prev = EX[id] || {};
+    const meas = F.meas || "reps", card = meas==="cardio";
     append({species:"exdef", ex:id, def:{
-      n:F.n, g:F.g||"", s:F.s||"push", iso:F.iso?1:0, bw:F.bw?1:0,
+      n:F.n, g:F.g||"", s:F.s||"push",
+      iso: meas==="hold"?1:0, lvl: card?1:0, dur: card?1:0,
+      bw: card?0:(F.bw?1:0),
       ord: prev.ord ?? (Object.keys(EX).length+1), hidden:0
     }});
     toast(F.ex?"Saved":"Added");
