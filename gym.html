@@ -64,6 +64,24 @@ button{background:none;border:0;cursor:pointer}
 .c-cardio{background:var(--cardio)}
 .c-isom{background:var(--isom)}
 .c-yoga{background:var(--yoga)}
+.himp{display:block;width:100%;margin-top:16px;padding:16px 18px;text-align:left;border-radius:var(--r);
+  background:transparent;border:1px dashed var(--cardio);color:var(--tx)}
+.himp:active{background:var(--surf)}
+.himp b{display:block;font-size:14px;font-weight:800;letter-spacing:.055em}
+.himp span{display:block;font-size:12.5px;font-weight:600;color:var(--mut);margin-top:4px;line-height:1.45}
+
+/* ── ride chart ──────────────────────────────────────── */
+.ride{margin-top:6px;background:var(--surf);border:1px solid var(--line);border-radius:var(--r);padding:14px 12px 10px}
+.ride svg{display:block;width:100%;height:auto}
+.ride .cap{font-size:11px;font-weight:750;letter-spacing:.12em;color:var(--mut);
+  text-transform:uppercase;margin:0 3px 10px}
+.rstats{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+.rstat{flex:1 1 74px;background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:9px 10px}
+.rstat i{display:block;font-style:normal;font-size:10px;font-weight:750;letter-spacing:.11em;
+  color:var(--mut);text-transform:uppercase}
+.rstat b{display:block;font-size:19px;font-weight:800;margin-top:3px;letter-spacing:-.01em}
+.rfig{font-size:27px;font-weight:850;letter-spacing:-.025em;margin:2px 3px 16px}
+.rfig em{font-style:normal;font-size:.52em;font-weight:700;color:var(--mut)}
 
 /* ── exercise list ───────────────────────────────────── */
 .list{display:flex;flex-direction:column;gap:9px}
@@ -173,6 +191,8 @@ button{background:none;border:0;cursor:pointer}
 .set.ramp .tag{color:var(--dim)}
 .set .del{margin-left:auto;color:#c9564c;font-size:14px;font-weight:700;padding:2px 4px;flex:none;display:none}
 .set.on .del{display:block}
+.set .del.ride-b{color:#9b86e0}
+.set .del.ride-b ~ .del{margin-left:10px}
 .set.on .tag{display:none}
 
 .empty{color:var(--dim);font-size:14.5px;padding:16px 3px;line-height:1.5}
@@ -510,6 +530,7 @@ function readHealth(files){
     });
     if(hr.length){
       hr.sort((a,b)=>a[0]-b[0]);
+      Object.assign(S, condense(hr));
       const v=hr.map(x=>x[1]);
       S.hr_avg=Math.round(v.reduce((a,b)=>a+b,0)/v.length);
       S.hr_max=Math.max(...v); S.hr_end=v[v.length-1]; S.hr_n=hr.length;
@@ -527,8 +548,32 @@ function readHealth(files){
   return S;
 }
 
+/* The full trace is one sample a second. Stored whole it would crowd the
+   ledger for no gain, so it is averaged into buckets chosen to keep the
+   shape under about ninety points — the same reduction you see drawn. */
+function condense(hr){
+  const t0 = hr[0][0];
+  const span = Math.max(1, Math.round((hr[hr.length-1][0]-t0)/1000));
+  const iv = [1,2,5,10,15,20,30,60,120,300].find(x=>span/x<=90) || 300;
+  const buck = new Map();
+  hr.forEach(([t,v])=>{
+    const b = Math.floor((t-t0)/1000/iv);
+    if(!buck.has(b)) buck.set(b,[]);
+    buck.get(b).push(v);
+  });
+  const hrs = [...buck.keys()].sort((a,b)=>a-b)
+    .map(k=>{ const a=buck.get(k); return Math.round(a.reduce((x,y)=>x+y,0)/a.length); });
+  return {hrs, hri:iv};
+}
+
 function healthDupe(exId, start){
   return setsOf(exId).find(e => e.src==="health" && Math.abs(e.ts-start) < 60000) || null;
+}
+
+/* Where an import started from the home screen lands. */
+function defaultCardioEx(){
+  if(EX.rbk && !EX.rbk.hidden) return "rbk";
+  return inSplit("cardio")[0] || null;
 }
 
 async function importHealth(exId, files){
@@ -546,7 +591,7 @@ async function importHealth(exId, files){
 
   const m = EX[exId];
   F = {ex:exId, mode:"set", setkind:"work",
-       w:0, reps:0, hold:(m.dur ? S.mins : 0), hr:(m.hr ? (S.hr_avg||0) : 0), mi:0,
+       w:0, reps:0, hold:S.mins||0, hr:S.hr_avg||0, mi:0,
        __imp:S, __needLvl:1};
   SHEET = sheetSet;
   buzz(10);
@@ -626,6 +671,7 @@ function render(){
   const app = document.getElementById("app");
   app.innerHTML = SCREEN.v==="home" ? viewHome()
                 : SCREEN.v==="split" ? viewSplit(SCREEN.s)
+                : SCREEN.v==="session" ? viewSession(SCREEN.id)
                 : viewExercise(SCREEN.ex);
   if(SHEET) app.insertAdjacentHTML("beforeend", SHEET());
   window.scrollTo(0, window.__sy||0);
@@ -640,6 +686,11 @@ function viewHome(){
          '<b>'+SPLITS[s].toUpperCase()+'</b><span>'+SUBTITLE[s]+'</span></button>';
   });
   h += '</div>';
+  h += '<button class="himp" data-a="pickhealth">'+
+       '<b>IMPORT A HEALTH EXPORT</b>'+
+       '<span>Reads time and heart rate out of the .zip. You enter level and distance.</span>'+
+       '</button>'+
+       '<input type="file" id="hxFile" accept=".zip,.csv" multiple hidden>';
   if(loadErr) h += '<div class="empty">'+esc(loadErr)+'</div>';
   return h+'</div>';
 }
@@ -714,7 +765,7 @@ function viewExercise(id){
        '<b>EDGE</b><span>'+(pe ? plain(pe) : 'Set an edge preset')+'</span></button>'+
        '<button class="act a-add" data-a="addset" data-ex="'+id+'">'+
        '<b>+ ADD</b><span>Log a custom set</span></button>'+
-       (m.dur && m.hr ?
+       (m.s==="cardio" || m.dur ?
          '<button class="act a-imp" data-a="pickhealth" data-ex="'+id+'">'+
          '<b>IMPORT</b><span>Read time and heart rate from a Health export</span></button>'+
          '<input type="file" id="hxFile" accept=".zip,.csv" multiple hidden>' : '')+
@@ -746,6 +797,98 @@ function viewExercise(id){
   return h+'</div>';
 }
 
+/* A ride drawn from the stored buckets. Plain SVG — no library, and it
+   renders the same offline as on. */
+function rideChart(hrs, hri){
+  if(!hrs || hrs.length<2) return "";
+  const W=320, H=178, L=32, R=6, T=8, B=24;
+  const lo=Math.min(...hrs), hi=Math.max(...hrs);
+  const step=[1,2,5,10,20,25,50].find(x=>(hi-lo)/x<=4)||50;
+  let y0=Math.floor(lo/step)*step, y1=Math.ceil(hi/step)*step;
+  if(y1<=hi) y1+=step;            /* headroom, so the peak is not drawn on the frame */
+  if(y0>=lo) y0-=step;
+  const ticks=Math.max(2, Math.round((y1-y0)/step));
+  const span=(hrs.length-1)*hri;
+  const px=i=>L+(i/(hrs.length-1))*(W-L-R);
+  const py=v=>T+(1-(v-y0)/(y1-y0))*(H-T-B);
+
+  let g="";
+  for(let i=0;i<=ticks;i++){
+    const v=y0+(y1-y0)*i/ticks, y=py(v);
+    g+='<line x1="'+L+'" y1="'+y.toFixed(1)+'" x2="'+(W-R)+'" y2="'+y.toFixed(1)+
+       '" stroke="#1f2a37" stroke-width="1"/>'+
+       '<text x="'+(L-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="9.5" '+
+       'fill="#7f8d9e" font-family="inherit">'+Math.round(v)+'</text>';
+  }
+  /* a minute mark every 60s while that stays readable, else every 2 or 5 */
+  const stepS = span<=600?60 : span<=1800?300 : 600;
+  for(let t=0;t<=span;t+=stepS){
+    const x=px(t/hri);
+    /* the first and last marks are pinned inside the frame so they never clip */
+    const anc = x<L+10 ? "start" : x>W-R-10 ? "end" : "middle";
+    const xa  = anc==="start" ? L : anc==="end" ? W-R : x;
+    g+='<text x="'+xa.toFixed(1)+'" y="'+(H-7)+'" text-anchor="'+anc+'" font-size="9.5" '+
+       'fill="#7f8d9e" font-family="inherit">'+Math.floor(t/60)+':'+pad(t%60)+'</text>';
+  }
+  const pts=hrs.map((v,i)=>px(i).toFixed(1)+","+py(v).toFixed(1)).join(" ");
+  const area="M"+px(0).toFixed(1)+","+py(y0).toFixed(1)+" L"+pts.replace(/ /g," L")+
+             " L"+px(hrs.length-1).toFixed(1)+","+py(y0).toFixed(1)+" Z";
+  const iMax=hrs.indexOf(Math.max(...hrs));
+
+  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Heart rate through the ride">'+
+    '<defs><linearGradient id="rg" x1="0" y1="0" x2="0" y2="1">'+
+    '<stop offset="0" stop-color="#e05a4e" stop-opacity=".30"/>'+
+    '<stop offset="1" stop-color="#e05a4e" stop-opacity="0"/></linearGradient></defs>'+
+    g+
+    '<path d="'+area+'" fill="url(#rg)"/>'+
+    '<polyline points="'+pts+'" fill="none" stroke="#e05a4e" stroke-width="2" '+
+    'stroke-linejoin="round" stroke-linecap="round"/>'+
+    '<circle cx="'+px(iMax).toFixed(1)+'" cy="'+py(hrs[iMax]).toFixed(1)+'" r="3" fill="#e05a4e"/>'+
+    '</svg>';
+}
+
+function viewSession(id){
+  const e = L.events.find(x=>x.id===id);
+  if(!e){ SCREEN={v:"home"}; return viewHome(); }
+  const m = EX[e.ex] || {n:"Session"};
+  const secs = e.secs || Math.round((e.hold||0)*60);
+  const dur = Math.floor(secs/60)+":"+pad(secs%60);
+
+  let h = '<div class="bar"><button class="back" data-a="ex" data-ex="'+esc(e.ex)+
+          '" aria-label="Back">&#8249;</button>'+
+          '<div class="exhd"><b>'+esc(m.n)+'</b><span>'+esc(dayLabel(dayKey(e.ts)))+
+          ' &middot; '+clock(e.ts)+'</span></div></div><div class="wrap">';
+
+  h += '<div class="rfig">'+figure(m,e.w,e.reps,e.hold,e.hr,e.mi)+'</div>';
+
+  if(e.hrs && e.hrs.length>1){
+    h += '<div class="ride"><div class="cap">Heart rate through the ride</div>'+
+         rideChart(e.hrs,e.hri||10)+'</div>';
+  }else{
+    h += '<div class="empty">No heart-rate trace was stored with this set.</div>';
+  }
+
+  const st = (lab,val) => '<div class="rstat"><i>'+lab+'</i><b>'+val+'</b></div>';
+  h += '<div class="rstats">'+
+       st("Duration", dur)+
+       (e.hr    ? st("Average", e.hr+'') : "")+
+       (e.hr_max? st("Peak",    e.hr_max+'') : "")+
+       (e.hr_end? st("Ended",   e.hr_end+'') : "")+
+       '</div>';
+  h += '<div class="rstats">'+
+       (e.mi    ? st("Distance", num(e.mi)+" mi") : "")+
+       (m.lvl   ? st("Level",    num(e.w)) : "")+
+       (e.kj    ? st("Energy",   num(Math.round(e.kj))+" kJ") : "")+
+       '</div>';
+
+  if(e.src==="health"){
+    h += '<div class="hint" style="margin-top:16px">Duration and heart rate came out of the '+
+         'Health export. '+(e.typed&&e.typed.length ? 'The '+esc(e.typed.join(" and "))+' '+
+         (e.typed.length>1?"were":"was")+' entered by hand.' : 'Nothing else was entered.')+'</div>';
+  }
+  return h+'</div>';
+}
+
 function setRow(m,e){
   const armed = ARMED===e.id, k = e.setkind||"work";
   return '<div class="set '+esc(k)+(armed?" on":"")+'" data-a="armset" data-id="'+e.id+'">'+
@@ -754,6 +897,7 @@ function setRow(m,e){
          '<span class="fg">'+figure(m,e.w,e.reps,e.hold,e.hr,e.mi)+
            (e.v?' <span class="vtag">'+esc(e.v)+'</span>':'')+'</span>'+
          (k!=="work"?'<span class="tag">'+esc(k)+'</span>':'')+
+         (armed&&e.hrs?'<button class="del ride-b" data-a="ride" data-id="'+e.id+'">Ride</button>':'')+
          (armed?'<button class="del" data-a="voidset" data-id="'+e.id+'">Void</button>':'')+
          '</div>';
 }
@@ -808,11 +952,11 @@ function sheetSet(){
 
   h += m.lvl ? stepper("w","Difficulty (1–16)"+(F.__needLvl?" · not set":""),"",1)
              : stepper("w", m.bw?"Load (lb · 0 = bodyweight)":"Load (lb)","lb",5);
-  if(m.mi) h += stepper("mi","Distance"+(F.__imp?" · yours to enter":""),"mi",0.1);
-  h += m.dur ? stepper("hold","Time"+(F.__imp?" · from the file":""),"min",1)
+  if(m.mi || F.__imp) h += stepper("mi","Distance"+(F.__imp?" · yours to enter":""),"mi",0.1);
+  h += (m.dur || F.__imp) ? stepper("hold","Time"+(F.__imp?" · from the file":""),"min",1)
      : m.iso ? stepper("hold","Hold","s",5)
              : stepper("reps","Reps","",1);
-  if(m.hr) h += stepper("hr","Working heart rate"+(F.__imp?" · measured average":" (estimate)"),"bpm",5);
+  if(m.hr || F.__imp) h += stepper("hr","Working heart rate"+(F.__imp?" · measured average":" (estimate)"),"bpm",5);
 
   if(F.mode==="set"){
     h += '<div class="fld"><label>Kind</label><div class="segs">'+
@@ -993,7 +1137,8 @@ document.addEventListener("click", ev=>{
   }
 
   if(a==="pickhealth"){
-    HX_EX = t.dataset.ex;
+    HX_EX = t.dataset.ex || defaultCardioEx();
+    if(!HX_EX) return toast("No cardio movement to import into.", true);
     const el = document.getElementById("hxFile");
     if(el){ el.value=""; el.click(); }
     return;
@@ -1032,7 +1177,7 @@ document.addEventListener("click", ev=>{
     } else if(m.iso){
       if(!F.hold) return toast("Hold is 0. Nothing to record.", true);
     } else if(!F.reps){ return toast("Reps is 0. Nothing to record.", true); }
-    if(F.__needLvl) return toast("Set the level before recording.", true);
+    if(F.__needLvl && m.lvl) return toast("Set the level before recording.", true);
     const ev = {species:"observation", kind:"set", ex:F.ex, v:curVar(F.ex),
                 w:F.w||0, reps:F.reps||0, hold:F.hold||0, hr:F.hr||0, mi:F.mi||0,
                 setkind:F.setkind||"work", unit:"lb"};
@@ -1040,12 +1185,17 @@ document.addEventListener("click", ev=>{
       const S=F.__imp;
       ev.ts=S.start; ev.src="health"; ev.secs=S.secs||0;
       if(S.hr_max) ev.hr_max=S.hr_max;
+      if(S.hrs && S.hrs.length){ ev.hrs=S.hrs; ev.hri=S.hri; }
       if(S.hr_end) ev.hr_end=S.hr_end;
       if(S.kj)     ev.kj=S.kj;
       ev.typed=["level", F.mi>0?"distance":null].filter(Boolean);
     }
     const ok = append(ev);
-    if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); }
+    if(ok){
+      buzz(14); toast("Recorded · "+clock(ok.ts));
+      if(ok.hrs && ok.hrs.length>1){ SHEET=null; F={}; SCREEN={v:"session", id:ok.id};
+                                     window.__sy=0; return render(); }
+    }
     return closeSheet();
   }
   if(a==="savepreset"){
@@ -1065,6 +1215,7 @@ document.addEventListener("click", ev=>{
   }
 
   /* void a mis-tap — recorded as a correction, never erased */
+  if(a==="ride"){ SCREEN={v:"session", id:t.dataset.id}; ARMED=null; window.__sy=0; return render(); }
   if(a==="armset"){ window.__sy=window.scrollY; ARMED = ARMED===t.dataset.id ? null : t.dataset.id; return render(); }
   if(a==="voidset"){
     ev.stopPropagation();
