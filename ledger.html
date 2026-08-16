@@ -1243,6 +1243,122 @@ function viewExercise(id){
 }
 
 /* ── CARDIO ── */
+
+/* ══════════════════════════════════════════════════════════════════════
+   10b. HEALTH AUTO EXPORT
+   Reads the .zip the phone produces. Everything here is device-measured.
+   Level and distance are not in the file and are never guessed — they are
+   typed in and stored as attested, so the two provenances stay separable.
+   ══════════════════════════════════════════════════════════════════════ */
+let PENDING = null;   /* a parsed session awaiting level + distance */
+
+async function unzip(file){
+  const buf = await file.arrayBuffer();
+  const dv  = new DataView(buf), u8 = new Uint8Array(buf);
+  let eo = -1, lim = Math.max(0, buf.byteLength - 65558);
+  for(let i = buf.byteLength - 22; i >= lim; i--){
+    if(dv.getUint32(i, true) === 0x06054b50){ eo = i; break; }
+  }
+  if(eo < 0) throw new Error("no zip directory");
+  const count = dv.getUint16(eo + 10, true);
+  let p = dv.getUint32(eo + 16, true);
+  const out = [];
+  for(let k = 0; k < count; k++){
+    if(dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true);
+    const csize  = dv.getUint32(p + 20, true);
+    const nlen   = dv.getUint16(p + 28, true);
+    const elen   = dv.getUint16(p + 30, true);
+    const clen   = dv.getUint16(p + 32, true);
+    const lho    = dv.getUint32(p + 42, true);
+    const name   = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nlen));
+    p += 46 + nlen + elen + clen;
+    if(name.endsWith("/") || name.split("/").pop().startsWith(".")) continue;
+    const lnlen = dv.getUint16(lho + 26, true), lelen = dv.getUint16(lho + 28, true);
+    const start = lho + 30 + lnlen + lelen;
+    const raw   = u8.subarray(start, start + csize);
+    let text;
+    if(method === 0){ text = new TextDecoder().decode(raw); }
+    else if(method === 8){
+      if(typeof DecompressionStream === "undefined") throw new Error("compressed zip unsupported");
+      const s = new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      text = await new Response(s).text();
+    } else continue;
+    out.push({name: name.split("/").pop(), text});
+  }
+  return out;
+}
+
+const hxTime = s => {
+  const m = String(s||"").trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  return m ? new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +(m[6]||0)).getTime() : null;
+};
+const hxCol = (row, re) => { for(const k in row){ if(re.test(k)) return row[k]; } return undefined; };
+
+function readHealthZip(files){
+  const uniq = re => [...new Map(files.filter(f => re.test(f.name)).map(f => [f.name, f])).values()];
+  const pick = re => uniq(re)[0];
+  const wks  = uniq(/^Workouts.*\.csv$/i);
+  const wkF  = wks[0];
+  const hrF  = pick(/Heart Rate.*\.csv$/i);
+  const aeF  = pick(/Active Energy.*\.csv$/i);
+  if(!wkF && !hrF) throw new Error("no workout or heart-rate file inside");
+
+  const S = {read:[], missing:[]};
+
+  if(wkF){
+    const r = parseCSV(wkF.text).filter(x => hxCol(x, /^Workout Type$/i));
+    const w = r[0];
+    if(w){
+      S.type  = hxCol(w, /^Workout Type$/i);
+      S.start = hxTime(hxCol(w, /^Start$/i));
+      S.end   = hxTime(hxCol(w, /^End$/i));
+      const d = String(hxCol(w, /^Duration$/i) || "").split(":").map(Number);
+      if(d.length === 3 && d.every(x => !isNaN(x))) S.secs = d[0]*3600 + d[1]*60 + d[2];
+      S.read.push("workout summary");
+    }
+  }
+
+  if(hrF){
+    const hr = [];
+    parseCSV(hrF.text).forEach(x => {
+      const t = hxTime(hxCol(x, /^Date\/Time$/i));
+      const v = Number(hxCol(x, /^Avg/i));
+      if(t && v > 0) hr.push([t, v]);
+    });
+    if(hr.length){
+      hr.sort((a, b) => a[0] - b[0]);
+      const v = hr.map(x => x[1]);
+      S.hr_n    = hr.length;
+      S.hr_avg  = Math.round(v.reduce((a, b) => a + b, 0) / v.length);
+      S.hr_min  = Math.min(...v);
+      S.hr_max  = Math.max(...v);
+      S.hr_end  = v[v.length - 1];
+      S.hr_from = v[0];
+      if(!S.start) S.start = hr[0][0];
+      if(!S.secs)  S.secs  = Math.round((hr[hr.length-1][0] - hr[0][0]) / 1000);
+      S.series  = hr.map(x => [Math.round((x[0] - hr[0][0]) / 1000), x[1]]);
+      S.read.push(hr.length + " heart-rate samples");
+    }
+  } else S.missing.push("heart rate");
+
+  if(aeF){
+    let kj = 0;
+    parseCSV(aeF.text).forEach(x => { const v = Number(hxCol(x, /Active Energy/i)); if(v > 0) kj += v; });
+    if(kj > 0){ S.work_kj = Math.round(kj * 10) / 10; S.read.push("active energy"); }
+  } else S.missing.push("active energy");
+
+  if(wks.length > 1) S.missing.push((wks.length-1)+" further session(s) in this zip, not read");
+  S.mins = S.secs ? Math.round(S.secs / 60 * 10) / 10 : 0;
+  if(!S.start) throw new Error("no timestamp inside");
+  return S;
+}
+
+function hxDupe(S){
+  return L.events.find(e => e.kind === "cardio" && e.source === "healthexport" &&
+                            Math.abs(e.ts - S.start) < 60000) || null;
+}
+
 function viewCardio(){
   const mod="bike", c=CARDIO[mod], t=cardioToday(mod);
 
@@ -1272,6 +1388,45 @@ function viewCardio(){
      '<div><label class="fld">Peak HR</label><input id="pHR" type="number" inputmode="numeric" value=""></div>'+
      '</div><button class="btn" data-act="addprobe">Record probe</button></div></div>';
 
+
+  h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Observation</span>'+
+     '<h2>Import a bike session</h2></div></div><div class="pb">'+
+     '<div class="drop" id="bikedrop"><div class="big">Drop the Health Auto Export .zip</div>'+
+     '<div class="small">Read in the browser. Nothing leaves the device.</div></div>'+
+     '<input type="file" id="bikeZip" accept=".zip,.csv" multiple class="hide">'+
+     '<div class="note" id="bikeNote" style="margin-top:10px">Duration, heart rate and active energy '+
+     'come out of the file. Level and distance are not in it — the phone never sees the console — '+
+     'so you enter those and they are stored as your reading, not the device\u2019s.</div></div></div>';
+
+  if(PENDING){
+    const S = PENDING;
+    const dur = S.secs ? Math.floor(S.secs/60)+":"+pad(S.secs%60) : "\u2014";
+    let read = '<b>'+esc(S.type||"Workout")+'</b> \u00b7 '+dayLabel(dayKey(S.start)).slice(0,6)+' '+
+               new Date(S.start).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})+
+               '<br>Duration <b>'+dur+'</b>';
+    if(S.hr_avg!=null) read += ' \u00b7 HR avg <b>'+S.hr_avg+'</b>, peak <b>'+S.hr_max+'</b>, '+
+                               'ended at <b>'+S.hr_end+'</b>';
+    if(S.work_kj!=null) read += '<br>Active energy <b>'+S.work_kj+'</b> kJ';
+    if(S.missing.length) read += '<br><span class="c-muted">Not in the file: '+esc(S.missing.join(", "))+'</span>';
+
+    const dup = hxDupe(S);
+    h+='<div class="panel"><div class="ph"><div><span class="eyebrow">Read from device</span>'+
+       '<h2>Confirm the session</h2></div><span class="sp obs">observation</span></div><div class="pb">'+
+       '<div class="note">'+read+'</div>'+
+       (dup ? '<div class="banner warn" style="margin:10px 0">A session from this time is already in the '+
+              'ledger ('+esc(dup.id)+'). Recording again will add a second entry, not replace it.</div>' : '')+
+       '<div class="fldrow" style="margin-top:11px">'+
+       '<div><label class="fld">Level</label><input id="bLevel" type="number" inputmode="numeric" value=""></div>'+
+       '<div><label class="fld">Distance (mi)</label><input id="bDist" type="number" inputmode="decimal" step="0.01" value=""></div>'+
+       '</div>'+
+       '<div class="small c-muted">Both are entered by hand. Left blank they are stored as absent rather '+
+       'than as zero \u2014 a session with no level recorded is not a session at level nothing.</div>'+
+       '<div class="row" style="margin-top:11px">'+
+       '<button class="btn" data-act="recordbike">Record session</button>'+
+       '<button class="btn sm ghost" data-act="dropbike">Discard</button></div>'+
+       '</div></div>';
+  }
+
   const es=cardioOf(mod).slice(0,20);
   h+='<div class="panel"><div class="ph"><h2>Recent</h2></div><div class="pb tight">';
   if(!es.length) h+='<div class="pb"><div class="note">Nothing recorded.</div></div>';
@@ -1279,7 +1434,12 @@ function viewCardio(){
     const what = e.cardiokind==="probe"
       ? '<b>Probe</b> '+(e.secs||0)+'s'+(e.work_kj!=null?' · '+e.work_kj+' '+esc(c.unit):'')+
         (e.hr_peak!=null?' · peak '+e.hr_peak:'')
-      : '<b>Base</b> '+(e.mins||0)+' min'+(e.hr_avg!=null?' · avg '+e.hr_avg:'');
+      : '<b>Base</b> '+(e.mins||0)+' min'+
+        (e.dist_mi!=null?' · '+e.dist_mi+' mi':'')+
+        (e.level!=null?' · level '+e.level:'')+
+        (e.hr_avg!=null?' · avg '+e.hr_avg:'')+
+        (e.hr_max!=null?' · peak '+e.hr_max:'')+
+        (e.source==="healthexport"?' <span class="c-muted">· device</span>':'');
     h+='<div class="ev"><div class="when">'+dayLabel(dayKey(e.ts)).slice(0,6)+'</div>'+
        '<div class="what">'+what+'</div></div>';
   });
@@ -1519,6 +1679,23 @@ document.addEventListener("click", async ev=>{
     setTimeout(()=>URL.revokeObjectURL(url),2000);
   }
   else if(a==="importJson"){ $("jsonInput").click(); }
+  else if(a==="dropbike"){ PENDING=null; render(); }
+  else if(a==="recordbike"){
+    const S=PENDING; if(!S) return;
+    const lvl=$("bLevel")&&$("bLevel").value.trim(), dst=$("bDist")&&$("bDist").value.trim();
+    append({species:"observation", kind:"cardio", modality:"bike", cardiokind:"easy",
+            ts:S.start, mins:S.mins, secs:S.secs||null,
+            hr_avg:S.hr_avg!=null?S.hr_avg:null, hr_min:S.hr_min!=null?S.hr_min:null,
+            hr_max:S.hr_max!=null?S.hr_max:null, hr_end:S.hr_end!=null?S.hr_end:null,
+            work_kj:S.work_kj!=null?S.work_kj:null,
+            level: lvl ? Number(lvl) : null,
+            dist_mi: dst ? Number(dst) : null,
+            entered: [lvl?"level":null, dst?"distance":null].filter(Boolean),
+            source:"healthexport"});
+    PENDING=null;
+    flash={k:"ok", m:"Session recorded"+(lvl||dst?" with level and distance as entered.":". Level and distance left absent.")};
+    render();
+  }
 });
 
 /* file inputs */
@@ -1538,7 +1715,27 @@ document.addEventListener("change", async ev=>{
     render();
   }
   if(ev.target.id==="fileInput"){ await handleFiles(ev.target.files); }
+  if(ev.target.id==="bikeZip"){ await handleBike(ev.target.files); ev.target.value=""; }
 });
+
+
+async function handleBike(files){
+  const fs=[...files]; if(!fs.length) return;
+  try{
+    let parts=[];
+    for(const f of fs){
+      if(/\.zip$/i.test(f.name))      parts = parts.concat(await unzip(f));
+      else if(/\.csv$/i.test(f.name)) parts.push({name:f.name, text:await f.text()});
+    }
+    if(!parts.length) throw new Error("nothing readable in that file");
+    PENDING = readHealthZip(parts);
+    flash = null;
+  }catch(e){
+    PENDING = null;
+    flash = {k:"stop", m:"That file could not be read as a Health export \u2014 "+(e.message||"unknown format")+"."};
+  }
+  render();
+}
 
 async function handleFiles(files){
   const report=[]; let total=0;
@@ -1567,6 +1764,15 @@ document.addEventListener("drop", async e=>{
   if(e.dataTransfer && e.dataTransfer.files.length) await handleFiles(e.dataTransfer.files);
 });
 document.addEventListener("click", e=>{ if(e.target.closest("#drop")) $("fileInput").click(); });
+document.addEventListener("click", e=>{ if(e.target.closest("#bikedrop")) $("bikeZip").click(); });
+["dragenter","dragover"].forEach(k=>document.addEventListener(k, e=>{
+  const d=e.target.closest("#bikedrop"); if(d){ e.preventDefault(); d.classList.add("over"); } }));
+document.addEventListener("dragleave", e=>{ const d=e.target.closest("#bikedrop"); if(d) d.classList.remove("over"); });
+document.addEventListener("drop", async e=>{
+  const d=e.target.closest("#bikedrop"); if(!d) return;
+  e.preventDefault(); d.classList.remove("over");
+  await handleBike(e.dataTransfer.files);
+});
 
 /* ══════════════════════════════════════════════════════════════════════
    13. BOOT
