@@ -489,7 +489,8 @@ async function unzip(file){
     let text;
     if(method===0) text=new TextDecoder().decode(raw);
     else if(method===8){
-      if(typeof DecompressionStream==="undefined") throw new Error("this browser can't open zips");
+      if(typeof DecompressionStream==="undefined")
+        throw new Error("this browser cannot unzip \u2014 update iOS, or drop the CSVs in loose");
       const s=new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
       text=await new Response(s).text();
     } else continue;
@@ -582,8 +583,10 @@ async function importHealth(exId, files){
   try{
     let parts=[];
     for(const f of fs){
-      if(/\.zip$/i.test(f.name))      parts=parts.concat(await unzip(f));
-      else if(/\.csv$/i.test(f.name)) parts.push({name:f.name, text:await f.text()});
+      const head = new Uint8Array(await f.slice(0,2).arrayBuffer());
+      const isZip = (head[0]===0x50 && head[1]===0x4b) || /\.zip$/i.test(f.name||"");
+      if(isZip) parts = parts.concat(await unzip(f));
+      else      parts.push({name:f.name||"pasted.csv", text:await f.text()});
     }
     if(!parts.length) throw new Error("nothing readable inside");
     S = readHealth(parts);
@@ -689,8 +692,7 @@ function viewHome(){
   h += '<button class="himp" data-a="pickhealth">'+
        '<b>IMPORT A HEALTH EXPORT</b>'+
        '<span>Reads time and heart rate out of the .zip. You enter level and distance.</span>'+
-       '</button>'+
-       '<input type="file" id="hxFile" accept=".zip,.csv" multiple hidden>';
+       '</button>';
   if(loadErr) h += '<div class="empty">'+esc(loadErr)+'</div>';
   return h+'</div>';
 }
@@ -767,8 +769,7 @@ function viewExercise(id){
        '<b>+ ADD</b><span>Log a custom set</span></button>'+
        (m.s==="cardio" || m.dur ?
          '<button class="act a-imp" data-a="pickhealth" data-ex="'+id+'">'+
-         '<b>IMPORT</b><span>Read time and heart rate from a Health export</span></button>'+
-         '<input type="file" id="hxFile" accept=".zip,.csv" multiple hidden>' : '')+
+         '<b>IMPORT</b><span>Read time and heart rate from a Health export</span></button>' : '')+
        '</div>';
 
   /* today */
@@ -1082,11 +1083,28 @@ const buzz = ms => { try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){
 
 function closeSheet(){ SHEET=null; F={}; render(); }
 
-document.addEventListener("change", async ev=>{
-  if(ev.target.id!=="hxFile") return;
-  const files=ev.target.files; ev.target.value="";
-  if(HX_EX && files && files.length) await importHealth(HX_EX, files);
-});
+let HX_INPUT = null;
+function hxInput(){
+  if(HX_INPUT && HX_INPUT.isConnected) return HX_INPUT;
+  const el = document.createElement("input");
+  el.type = "file";
+  el.multiple = true;
+  /* no accept filter: iOS greys out .zip in the Files picker often enough
+     that it is safer to take any file and check the contents instead */
+  el.setAttribute("aria-hidden","true");
+  el.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0";
+  el.addEventListener("change", async ()=>{
+    const files = el.files ? [...el.files] : [];
+    el.value = "";
+    if(!files.length) return;
+    if(!HX_EX) return toast("Nothing to import into.", true);
+    toast("Reading "+files[0].name+"\u2026");
+    await importHealth(HX_EX, files);
+  });
+  document.body.appendChild(el);
+  HX_INPUT = el;
+  return el;
+}
 
 function readFields(){
   ["w","reps","hold","hr","mi"].forEach(k=>{
@@ -1139,8 +1157,7 @@ document.addEventListener("click", ev=>{
   if(a==="pickhealth"){
     HX_EX = t.dataset.ex || defaultCardioEx();
     if(!HX_EX) return toast("No cardio movement to import into.", true);
-    const el = document.getElementById("hxFile");
-    if(el){ el.value=""; el.click(); }
+    hxInput().click();
     return;
   }
   if(a==="addset"){
