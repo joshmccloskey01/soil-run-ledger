@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Gym">
 <meta name="color-scheme" content="dark">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#05080c">
 <title>Gym</title>
 <style>
@@ -69,6 +72,10 @@ button{background:none;border:0;cursor:pointer}
 .himp:active{background:var(--surf)}
 .himp b{display:block;font-size:14px;font-weight:800;letter-spacing:.055em}
 .himp span{display:block;font-size:12.5px;font-weight:600;color:var(--mut);margin-top:4px;line-height:1.45}
+.hxlog{margin:9px 3px 0;font-size:12px;font-weight:600;color:var(--mut);line-height:1.45}
+.hxlog.bad{color:#e0574d}
+.build{margin:22px 3px 4px;font-size:10.5px;font-weight:700;letter-spacing:.13em;
+  color:var(--dim);text-transform:uppercase}
 
 /* ── ride chart ──────────────────────────────────────── */
 .ride{margin-top:6px;background:var(--surf);border:1px solid var(--line);border-radius:var(--r);padding:14px 12px 10px}
@@ -433,6 +440,8 @@ function voidedIds(){
 }
 let VOIDED = new Set();
 let HX_EX = null;   /* exercise awaiting a Health import */
+let HX_LOG = null;  /* last import attempt, shown on the home screen */
+const hxSay = (m, bad) => { HX_LOG = {m, bad:!!bad}; };
 const setsOf = id => obsOf("set").filter(e=>e.ex===id && !VOIDED.has(e.id)).sort((a,b)=>b.ts-a.ts);
 
 
@@ -590,7 +599,13 @@ async function importHealth(exId, files){
     }
     if(!parts.length) throw new Error("nothing readable inside");
     S = readHealth(parts);
-  }catch(e){ return toast("Couldn't read that \u2014 "+(e.message||"unknown format")+".", true); }
+    hxSay("Read "+(S.secs?Math.floor(S.secs/60)+":"+pad(S.secs%60):"?")+
+          (S.hr_avg?", heart rate avg "+S.hr_avg:"")+". Enter level and distance.");
+  }catch(e){
+    hxSay("Couldn't read it \u2014 "+(e.message||"unknown format")+".", true);
+    toast("Couldn't read that file.", true);
+    return render();
+  }
 
   const m = EX[exId];
   F = {ex:exId, mode:"set", setkind:"work",
@@ -693,6 +708,9 @@ function viewHome(){
        '<b>IMPORT A HEALTH EXPORT</b>'+
        '<span>Reads time and heart rate out of the .zip. You enter level and distance.</span>'+
        '</button>';
+  h += '<div class="hxlog'+(HX_LOG&&HX_LOG.bad?" bad":"")+'">'+
+       esc(HX_LOG ? HX_LOG.m : "No import attempted yet.")+'</div>';
+  h += '<div class="build">build 2026-08-16c</div>';
   if(loadErr) h += '<div class="empty">'+esc(loadErr)+'</div>';
   return h+'</div>';
 }
@@ -928,7 +946,8 @@ function sheetSet(){
           esc(cv || m.n)+'</h3>';
 
   if(F.mode==="preset"){
-    h += '<div class="hint">Set the numbers, then save them as base or edge. Nothing else changes a preset.</div>'+
+    h += '<div class="hint">Set the numbers, then save them as base or edge. Nothing else changes a preset.'+
+         (m.dur&&m.hr ? ' Time and heart rate are not here — those come off the watch.' : '')+'</div>'+
          '<div class="nowline">'+
            '<span><i class="lb">Base</i> '+(pb?plain(pb):'&mdash;')+'</span>'+
            '<span><i class="le">Edge</i> '+(pe?plain(pe):'&mdash;')+'</span>'+
@@ -953,11 +972,16 @@ function sheetSet(){
 
   h += m.lvl ? stepper("w","Difficulty (1–16)"+(F.__needLvl?" · not set":""),"",1)
              : stepper("w", m.bw?"Load (lb · 0 = bodyweight)":"Load (lb)","lb",5);
+  /* On a preset, time and heart rate are left out: they are read off the watch,
+     not chosen in advance. A preset holds only what you set — level and distance. */
+  const measured = F.mode==="preset" && m.dur && m.hr;
   if(m.mi || F.__imp) h += stepper("mi","Distance"+(F.__imp?" · yours to enter":""),"mi",0.1);
-  h += (m.dur || F.__imp) ? stepper("hold","Time"+(F.__imp?" · from the file":""),"min",1)
-     : m.iso ? stepper("hold","Hold","s",5)
-             : stepper("reps","Reps","",1);
-  if(m.hr || F.__imp) h += stepper("hr","Working heart rate"+(F.__imp?" · measured average":" (estimate)"),"bpm",5);
+  if(!measured){
+    h += (m.dur || F.__imp) ? stepper("hold","Time"+(F.__imp?" · from the file":""),"min",1)
+       : m.iso ? stepper("hold","Hold","s",5)
+               : stepper("reps","Reps","",1);
+    if(m.hr || F.__imp) h += stepper("hr","Working heart rate"+(F.__imp?" · measured average":" (estimate)"),"bpm",5);
+  }
 
   if(F.mode==="set"){
     h += '<div class="fld"><label>Kind</label><div class="segs">'+
@@ -1096,9 +1120,10 @@ function hxInput(){
   el.addEventListener("change", async ()=>{
     const files = el.files ? [...el.files] : [];
     el.value = "";
-    if(!files.length) return;
-    if(!HX_EX) return toast("Nothing to import into.", true);
-    toast("Reading "+files[0].name+"\u2026");
+    if(!files.length){ hxSay("Picker closed without a file.", true); return render(); }
+    if(!HX_EX){ hxSay("No cardio movement to import into.", true); return render(); }
+    hxSay("Got "+files[0].name+" ("+Math.round(files[0].size/1024)+" KB). Reading\u2026");
+    render();
     await importHealth(HX_EX, files);
   });
   document.body.appendChild(el);
@@ -1157,7 +1182,10 @@ document.addEventListener("click", ev=>{
   if(a==="pickhealth"){
     HX_EX = t.dataset.ex || defaultCardioEx();
     if(!HX_EX) return toast("No cardio movement to import into.", true);
+    hxSay("Picker opened\u2026 if this line does not change after you choose a file, "+
+          "the file never reached the page.");
     hxInput().click();
+    render();
     return;
   }
   if(a==="addset"){
@@ -1218,7 +1246,11 @@ document.addEventListener("click", ev=>{
   if(a==="savepreset"){
     readFields();
     const m = EX[F.ex], k = t.dataset.k || "base";
-    if(m.mi || m.dur){
+    const measured = m.dur && m.hr;
+    if(measured){
+      F.hold = 0; F.hr = 0;      /* kept out of the preset, not hidden inside it */
+      if(!F.mi) return toast("Set a distance.", true);
+    } else if(m.mi || m.dur){
       if(!F.mi && !F.hold) return toast("Set a distance or a time.", true);
     } else if(m.iso){
       if(!F.hold) return toast("Hold is 0. Set a value.", true);
