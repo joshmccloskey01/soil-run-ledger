@@ -146,6 +146,10 @@ button{background:none;border:0;cursor:pointer}
 .a-add{background:transparent;border:1px solid var(--line);color:var(--tx)}
 .a-add:active{background:var(--surf)}
 .a-add span{color:var(--mut);opacity:1}
+.a-imp{background:transparent;border:1px dashed var(--cardio);color:var(--tx)}
+.a-imp:active{background:var(--surf)}
+.a-imp b{font-size:19px;letter-spacing:.06em}
+.a-imp span{color:var(--mut);opacity:1}
 
 .sect{display:flex;align-items:center;gap:10px;margin:26px 3px 11px}
 .sect h2{margin:0;font-size:11px;font-weight:750;letter-spacing:.15em;text-transform:uppercase;color:var(--mut)}
@@ -408,7 +412,146 @@ function voidedIds(){
   return out;
 }
 let VOIDED = new Set();
+let HX_EX = null;   /* exercise awaiting a Health import */
 const setsOf = id => obsOf("set").filter(e=>e.ex===id && !VOIDED.has(e.id)).sort((a,b)=>b.ts-a.ts);
+
+
+/* ══════════════════════════════════════════════════════════════════
+   HEALTH AUTO EXPORT
+   The phone measures time and heart rate. It never sees the console,
+   so level and distance are not in the file and are not invented here
+   — they stay yours to enter. Read in the browser; nothing uploads.
+   ══════════════════════════════════════════════════════════════════ */
+function parseCSV(text){
+  const rows=[]; let i=0, field="", row=[], q=false;
+  text=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+  while(i<text.length){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; } else field+=c; }
+    else{
+      if(c==='"') q=true;
+      else if(c===","){ row.push(field); field=""; }
+      else if(c==="\n"){ row.push(field); rows.push(row); row=[]; field=""; }
+      else field+=c;
+    }
+    i++;
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  if(!rows.length) return [];
+  const head=rows[0].map(h=>h.trim());
+  return rows.slice(1).filter(r=>r.length>1).map(r=>{
+    const o={}; head.forEach((h,j)=>o[h]=(r[j]||"").trim()); return o;
+  });
+}
+
+async function unzip(file){
+  const buf = await file.arrayBuffer();
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  let eo=-1, lim=Math.max(0, buf.byteLength-65558);
+  for(let i=buf.byteLength-22; i>=lim; i--){
+    if(dv.getUint32(i,true)===0x06054b50){ eo=i; break; }
+  }
+  if(eo<0) throw new Error("not a zip file");
+  const count=dv.getUint16(eo+10,true);
+  let p=dv.getUint32(eo+16,true);
+  const out=[];
+  for(let k=0;k<count;k++){
+    if(dv.getUint32(p,true)!==0x02014b50) break;
+    const method=dv.getUint16(p+10,true), csize=dv.getUint32(p+20,true);
+    const nlen=dv.getUint16(p+28,true), elen=dv.getUint16(p+30,true), clen=dv.getUint16(p+32,true);
+    const lho=dv.getUint32(p+42,true);
+    const name=new TextDecoder().decode(u8.subarray(p+46,p+46+nlen));
+    p += 46+nlen+elen+clen;
+    if(name.endsWith("/") || name.split("/").pop().startsWith(".")) continue;
+    const lnlen=dv.getUint16(lho+26,true), lelen=dv.getUint16(lho+28,true);
+    const start=lho+30+lnlen+lelen;
+    const raw=u8.subarray(start,start+csize);
+    let text;
+    if(method===0) text=new TextDecoder().decode(raw);
+    else if(method===8){
+      if(typeof DecompressionStream==="undefined") throw new Error("this browser can't open zips");
+      const s=new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      text=await new Response(s).text();
+    } else continue;
+    out.push({name:name.split("/").pop(), text});
+  }
+  return out;
+}
+
+const hxTime = s => {
+  const m=String(s||"").trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  return m ? new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0)).getTime() : null;
+};
+const hxCol = (row,re) => { for(const k in row){ if(re.test(k)) return row[k]; } return undefined; };
+
+function readHealth(files){
+  const uniq = re => [...new Map(files.filter(f=>re.test(f.name)).map(f=>[f.name,f])).values()];
+  const wks = uniq(/^Workouts.*\.csv$/i);
+  const hrF = uniq(/Heart Rate.*\.csv$/i)[0];
+  const aeF = uniq(/Active Energy.*\.csv$/i)[0];
+  if(!wks.length && !hrF) throw new Error("no workout or heart-rate data inside");
+
+  const S = {extra:0};
+  if(wks[0]){
+    const w = parseCSV(wks[0].text).filter(x=>hxCol(x,/^Workout Type$/i))[0];
+    if(w){
+      S.type  = hxCol(w,/^Workout Type$/i);
+      S.start = hxTime(hxCol(w,/^Start$/i));
+      const d = String(hxCol(w,/^Duration$/i)||"").split(":").map(Number);
+      if(d.length===3 && d.every(x=>!isNaN(x))) S.secs = d[0]*3600+d[1]*60+d[2];
+    }
+    S.extra = wks.length-1;
+  }
+  if(hrF){
+    const hr=[];
+    parseCSV(hrF.text).forEach(x=>{
+      const t=hxTime(hxCol(x,/^Date\/Time$/i)), v=Number(hxCol(x,/^Avg/i));
+      if(t && v>0) hr.push([t,v]);
+    });
+    if(hr.length){
+      hr.sort((a,b)=>a[0]-b[0]);
+      const v=hr.map(x=>x[1]);
+      S.hr_avg=Math.round(v.reduce((a,b)=>a+b,0)/v.length);
+      S.hr_max=Math.max(...v); S.hr_end=v[v.length-1]; S.hr_n=hr.length;
+      if(!S.start) S.start=hr[0][0];
+      if(!S.secs)  S.secs=Math.round((hr[hr.length-1][0]-hr[0][0])/1000);
+    }
+  }
+  if(aeF){
+    let kj=0;
+    parseCSV(aeF.text).forEach(x=>{ const v=Number(hxCol(x,/Active Energy/i)); if(v>0) kj+=v; });
+    if(kj>0) S.kj=Math.round(kj*10)/10;
+  }
+  if(!S.start) throw new Error("no timestamp inside");
+  S.mins = S.secs ? Math.round(S.secs/60*10)/10 : 0;
+  return S;
+}
+
+function healthDupe(exId, start){
+  return setsOf(exId).find(e => e.src==="health" && Math.abs(e.ts-start) < 60000) || null;
+}
+
+async function importHealth(exId, files){
+  const fs=[...files]; if(!fs.length) return;
+  let S;
+  try{
+    let parts=[];
+    for(const f of fs){
+      if(/\.zip$/i.test(f.name))      parts=parts.concat(await unzip(f));
+      else if(/\.csv$/i.test(f.name)) parts.push({name:f.name, text:await f.text()});
+    }
+    if(!parts.length) throw new Error("nothing readable inside");
+    S = readHealth(parts);
+  }catch(e){ return toast("Couldn't read that \u2014 "+(e.message||"unknown format")+".", true); }
+
+  const m = EX[exId];
+  F = {ex:exId, mode:"set", setkind:"work",
+       w:0, reps:0, hold:(m.dur ? S.mins : 0), hr:(m.hr ? (S.hr_avg||0) : 0), mi:0,
+       __imp:S, __needLvl:1};
+  SHEET = sheetSet;
+  buzz(10);
+  render();
+}
 
 function figure(m, w, reps, hold, hr, mi){
   const load = m.lvl ? "L"+num(w)
@@ -571,6 +714,10 @@ function viewExercise(id){
        '<b>EDGE</b><span>'+(pe ? plain(pe) : 'Set an edge preset')+'</span></button>'+
        '<button class="act a-add" data-a="addset" data-ex="'+id+'">'+
        '<b>+ ADD</b><span>Log a custom set</span></button>'+
+       (m.dur && m.hr ?
+         '<button class="act a-imp" data-a="pickhealth" data-ex="'+id+'">'+
+         '<b>IMPORT</b><span>Read time and heart rate from a Health export</span></button>'+
+         '<input type="file" id="hxFile" accept=".zip,.csv" multiple hidden>' : '')+
        '</div>';
 
   /* today */
@@ -643,13 +790,29 @@ function sheetSet(){
          '</div>';
   }
 
-  h += m.lvl ? stepper("w","Difficulty (1–16)","",1)
+  if(F.__imp){
+    const S=F.__imp;
+    let line = '<b>Read from the file</b><br>'+esc(S.type||"Workout")+' · '+
+               esc(dayLabel(dayKey(S.start)))+' '+clock(S.start)+
+               (S.secs ? ' · '+Math.floor(S.secs/60)+':'+pad(S.secs%60) : '');
+    if(S.hr_avg) line += '<br>Heart rate avg '+S.hr_avg+', peak '+S.hr_max+', ended at '+S.hr_end;
+    if(S.kj) line += ' · '+S.kj+' kJ';
+    if(S.extra) line += '<br>'+S.extra+' further session'+(S.extra===1?'':'s')+
+                        ' in that file were not read.';
+    const dup = healthDupe(F.ex, S.start);
+    if(dup) line += '<br><span style="color:var(--pull)">A set from this session is already logged.</span>';
+    line += '<br><span style="color:var(--mut)">Level and distance are not in the file. Enter them below.</span>';
+    h += '<div class="hint" style="border:1px dashed var(--cardio);border-radius:12px;padding:12px;'+
+         'margin:-2px 0 16px;color:var(--tx);font-size:12.5px">'+line+'</div>';
+  }
+
+  h += m.lvl ? stepper("w","Difficulty (1–16)"+(F.__needLvl?" · not set":""),"",1)
              : stepper("w", m.bw?"Load (lb · 0 = bodyweight)":"Load (lb)","lb",5);
-  if(m.mi) h += stepper("mi","Distance","mi",0.1);
-  h += m.dur ? stepper("hold","Time","min",1)
+  if(m.mi) h += stepper("mi","Distance"+(F.__imp?" · yours to enter":""),"mi",0.1);
+  h += m.dur ? stepper("hold","Time"+(F.__imp?" · from the file":""),"min",1)
      : m.iso ? stepper("hold","Hold","s",5)
              : stepper("reps","Reps","",1);
-  if(m.hr) h += stepper("hr","Working heart rate (estimate)","bpm",5);
+  if(m.hr) h += stepper("hr","Working heart rate"+(F.__imp?" · measured average":" (estimate)"),"bpm",5);
 
   if(F.mode==="set"){
     h += '<div class="fld"><label>Kind</label><div class="segs">'+
@@ -775,11 +938,18 @@ const buzz = ms => { try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){
 
 function closeSheet(){ SHEET=null; F={}; render(); }
 
+document.addEventListener("change", async ev=>{
+  if(ev.target.id!=="hxFile") return;
+  const files=ev.target.files; ev.target.value="";
+  if(HX_EX && files && files.length) await importHealth(HX_EX, files);
+});
+
 function readFields(){
   ["w","reps","hold","hr","mi"].forEach(k=>{
     const el = document.getElementById("f_"+k);
     if(el) F[k] = Number(el.value)||0;
   });
+  if(F.__needLvl && Number(F.w)>0) F.__needLvl = 0;
   const n = document.getElementById("f_n"); if(n) F.n = n.value.trim();
   const g = document.getElementById("f_g"); if(g) F.g = g.value.trim();
   clampLevel();
@@ -787,6 +957,9 @@ function readFields(){
 /* Difficulty is a dial position, not a load: 1..16, whole numbers only. */
 function clampLevel(){
   const m = EX[F.ex];
+  /* An imported session starts with no level. Clamping would show 1 and make
+     an unset dial look set, so it waits until the dial is actually touched. */
+  if(F.__needLvl && !(Number(F.w)>0)) return;
   if(m && m.lvl) F.w = Math.min(16, Math.max(1, Math.round(Number(F.w)||1)));
 }
 
@@ -819,6 +992,12 @@ document.addEventListener("click", ev=>{
     return;
   }
 
+  if(a==="pickhealth"){
+    HX_EX = t.dataset.ex;
+    const el = document.getElementById("hxFile");
+    if(el){ el.value=""; el.click(); }
+    return;
+  }
   if(a==="addset"){
     const id = t.dataset.ex, p = presetOf(id) || {w:0,reps:0,hold:0,hr:0,mi:0};
     F = {ex:id, mode:"set", w:p.w, reps:p.reps||0, hold:p.hold||0, hr:p.hr||0, mi:p.mi||0, setkind:"work"};
@@ -853,9 +1032,19 @@ document.addEventListener("click", ev=>{
     } else if(m.iso){
       if(!F.hold) return toast("Hold is 0. Nothing to record.", true);
     } else if(!F.reps){ return toast("Reps is 0. Nothing to record.", true); }
-    const ok = append({species:"observation", kind:"set", ex:F.ex, v:curVar(F.ex),
-                       w:F.w||0, reps:F.reps||0, hold:F.hold||0, hr:F.hr||0, mi:F.mi||0,
-                       setkind:F.setkind||"work", unit:"lb"});
+    if(F.__needLvl) return toast("Set the level before recording.", true);
+    const ev = {species:"observation", kind:"set", ex:F.ex, v:curVar(F.ex),
+                w:F.w||0, reps:F.reps||0, hold:F.hold||0, hr:F.hr||0, mi:F.mi||0,
+                setkind:F.setkind||"work", unit:"lb"};
+    if(F.__imp){
+      const S=F.__imp;
+      ev.ts=S.start; ev.src="health"; ev.secs=S.secs||0;
+      if(S.hr_max) ev.hr_max=S.hr_max;
+      if(S.hr_end) ev.hr_end=S.hr_end;
+      if(S.kj)     ev.kj=S.kj;
+      ev.typed=["level", F.mi>0?"distance":null].filter(Boolean);
+    }
+    const ok = append(ev);
     if(ok){ buzz(14); toast("Recorded · "+clock(ok.ts)); }
     return closeSheet();
   }
