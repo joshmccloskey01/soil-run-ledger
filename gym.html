@@ -90,6 +90,41 @@ button{background:none;border:0;cursor:pointer}
 .rfig{font-size:27px;font-weight:850;letter-spacing:-.025em;margin:2px 3px 16px}
 .rfig em{font-style:normal;font-size:.52em;font-weight:700;color:var(--mut)}
 
+/* ── stints ──────────────────────────────────────────── */
+.tgt{background:var(--surf);border:1px solid var(--line);border-radius:var(--r);
+  padding:16px 15px 13px;margin:2px 0 20px}
+.tlab{font-size:10.5px;font-weight:800;letter-spacing:.15em;color:var(--cardio);
+  text-transform:uppercase}
+.tbig{font-size:20px;font-weight:850;letter-spacing:-.02em;margin-top:5px}
+.trow{display:flex;gap:10px;margin-top:14px}
+.tcell{flex:1;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 11px}
+.tcell i{display:block;font-style:normal;font-size:10px;font-weight:750;letter-spacing:.1em;
+  color:var(--mut);text-transform:uppercase}
+.tcell b{display:block;font-size:24px;font-weight:850;margin-top:3px;letter-spacing:-.02em}
+.tcell u{display:block;text-decoration:none;font-size:11.5px;font-weight:650;color:var(--mut);margin-top:2px}
+.ladder{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.rung{flex:0 0 auto;min-width:56px;background:var(--bg);border:1px solid var(--line);
+  border-radius:9px;padding:6px 8px;text-align:center}
+.rung i{display:block;font-style:normal;font-size:9.5px;font-weight:800;letter-spacing:.08em;color:var(--mut)}
+.rung b{display:block;font-size:14px;font-weight:750;margin-top:1px}
+.rung.none b{color:var(--dim)}
+.rung.goal{border-color:var(--cardio)}
+.rung.goal i{color:var(--cardio)}
+.tnote{font-size:11.5px;font-weight:600;color:var(--dim);line-height:1.45;margin-top:12px}
+
+.set.stint .fg{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.set.stint .fg .t{font-size:19px;font-weight:850;letter-spacing:-.02em}
+.set.stint .fg .mi,.set.stint .fg .lv{font-size:12.5px;font-weight:700;color:var(--mut)}
+.set.stint .fg .hx{font-size:12.5px;font-weight:750;color:#e05a4e}
+.set.stint .fg .hx.dim{color:var(--mut);font-weight:650}
+.set.stint .fg .pbt{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--cardio);border:1px solid var(--cardio);border-radius:6px;padding:1px 5px}
+.a-imp.lead{border-style:solid;background:rgba(90,63,158,.16)}
+.pfold{margin-top:12px}
+.pfold summary{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--mut);
+  text-transform:uppercase;padding:6px 3px;cursor:pointer}
+.acts.tight{margin-top:6px}
+
 /* ── exercise list ───────────────────────────────────── */
 .list{display:flex;flex-direction:column;gap:9px}
 .row2{
@@ -710,7 +745,7 @@ function viewHome(){
        '</button>';
   h += '<div class="hxlog'+(HX_LOG&&HX_LOG.bad?" bad":"")+'">'+
        esc(HX_LOG ? HX_LOG.m : "No import attempted yet.")+'</div>';
-  h += '<div class="build">build 2026-08-16c</div>';
+  h += '<div class="build">build 2026-08-16d</div>';
   if(loadErr) h += '<div class="empty">'+esc(loadErr)+'</div>';
   return h+'</div>';
 }
@@ -763,6 +798,9 @@ function viewExercise(id){
           '<button class="icon" data-a="exmenu" data-ex="'+id+'" aria-label="Options">&#8943;</button></div>'+
           '<div class="wrap">';
 
+  const stintMode = m.s==="cardio" && m.mi && m.dur;
+  if(stintMode) h += stintHead(id);
+
   /* progression levels */
   const lv = levels(id), cv = curVar(id);
   if(lv.length){
@@ -772,23 +810,39 @@ function viewExercise(id){
   }
 
   /* current preset */
+  if(!stintMode)
   h += '<div class="plab">Current preset</div>'+
        '<div class="preset"><div class="fig">'+
        (pb ? figure(m,pb.w,pb.reps,pb.hold,pb.hr,pb.mi) : '<em style="font-size:.62em">Not set</em>')+
        '</div><button class="edit" data-a="editpreset" data-k="base" data-ex="'+id+'">'+(pb?"Edit":"Set")+'</button></div>';
 
-  /* the three actions */
-  h += '<div class="acts">'+
-       '<button class="act a-base" data-a="'+(pb?"base":"editpreset")+'" data-k="base" data-ex="'+id+'">'+
-       '<b>BASE</b><span>'+(pb ? plain(pb) : 'Set a preset first')+'</span></button>'+
-       '<button class="act a-edge" data-a="'+(pe?"edge":"editpreset")+'" data-k="edge" data-ex="'+id+'">'+
-       '<b>EDGE</b><span>'+(pe ? plain(pe) : 'Set an edge preset')+'</span></button>'+
-       '<button class="act a-add" data-a="addset" data-ex="'+id+'">'+
-       '<b>+ ADD</b><span>Log a custom set</span></button>'+
-       (m.s==="cardio" || m.dur ?
-         '<button class="act a-imp" data-a="pickhealth" data-ex="'+id+'">'+
-         '<b>IMPORT</b><span>Read time and heart rate from a Health export</span></button>' : '')+
-       '</div>';
+  /* actions — on the bike the import leads, since that is where a stint comes from */
+  if(stintMode){
+    h += '<div class="acts">'+
+         '<button class="act a-imp lead" data-a="pickhealth" data-ex="'+id+'">'+
+         '<b>IMPORT A STINT</b><span>Time and heart rate read from the Health export</span></button>'+
+         '<button class="act a-add" data-a="addset" data-ex="'+id+'">'+
+         '<b>+ ADD BY HAND</b><span>If you did not export it</span></button>'+
+         '</div>'+
+         '<details class="pfold"><summary>Presets</summary><div class="acts tight">'+
+         '<button class="act a-base" data-a="'+(pb?"base":"editpreset")+'" data-k="base" data-ex="'+id+'">'+
+         '<b>BASE</b><span>'+(pb ? plain(pb) : 'Not set')+'</span></button>'+
+         '<button class="act a-edge" data-a="'+(pe?"edge":"editpreset")+'" data-k="edge" data-ex="'+id+'">'+
+         '<b>EDGE</b><span>'+(pe ? plain(pe) : 'Not set')+'</span></button>'+
+         '</div></details>';
+  } else {
+    h += '<div class="acts">'+
+         '<button class="act a-base" data-a="'+(pb?"base":"editpreset")+'" data-k="base" data-ex="'+id+'">'+
+         '<b>BASE</b><span>'+(pb ? plain(pb) : 'Set a preset first')+'</span></button>'+
+         '<button class="act a-edge" data-a="'+(pe?"edge":"editpreset")+'" data-k="edge" data-ex="'+id+'">'+
+         '<b>EDGE</b><span>'+(pe ? plain(pe) : 'Set an edge preset')+'</span></button>'+
+         '<button class="act a-add" data-a="addset" data-ex="'+id+'">'+
+         '<b>+ ADD</b><span>Log a custom set</span></button>'+
+         (m.dur ?
+           '<button class="act a-imp" data-a="pickhealth" data-ex="'+id+'">'+
+           '<b>IMPORT</b><span>Read time and heart rate from a Health export</span></button>' : '')+
+         '</div>';
+  }
 
   /* today */
   h += '<div class="sect"><h2>Today</h2>'+
@@ -796,7 +850,8 @@ function viewExercise(id){
   if(!today.length){
     h += '<div class="empty">Nothing recorded today.</div>';
   }else{
-    today.slice().sort((a,b)=>a.ts-b.ts).forEach(e=>{ h += setRow(m,e); });
+    today.slice().sort((a,b)=>a.ts-b.ts).forEach(e=>{
+      h += (stintMode && isStint(e)) ? stintRow(m,e) : setRow(m,e); });
   }
 
   /* earlier */
@@ -808,7 +863,8 @@ function viewExercise(id){
       h += '<div class="sect"><h2>Earlier</h2></div>';
       [...new Set(older.map(e=>dayKey(e.ts)))].slice(0,30).forEach(d=>{
         h += '<div class="dayhd">'+esc(dayLabel(d))+'</div>';
-        older.filter(e=>dayKey(e.ts)===d).sort((a,b)=>a.ts-b.ts).forEach(e=>{ h += setRow(m,e); });
+        older.filter(e=>dayKey(e.ts)===d).sort((a,b)=>a.ts-b.ts).forEach(e=>{
+          h += (stintMode && isStint(e)) ? stintRow(m,e) : setRow(m,e); });
       });
       h += '<button class="more" data-a="showall">Collapse</button>';
     }
@@ -878,7 +934,9 @@ function viewSession(id){
           '<div class="exhd"><b>'+esc(m.n)+'</b><span>'+esc(dayLabel(dayKey(e.ts)))+
           ' &middot; '+clock(e.ts)+'</span></div></div><div class="wrap">';
 
-  h += '<div class="rfig">'+figure(m,e.w,e.reps,e.hold,e.hr,e.mi)+'</div>';
+  h += isStint(e)
+     ? '<div class="rfig">'+mmss(secsOf(e))+' <em>for '+num(e.mi)+' mi at L'+num(e.w)+'</em></div>'
+     : '<div class="rfig">'+figure(m,e.w,e.reps,e.hold,e.hr,e.mi)+'</div>';
 
   if(e.hrs && e.hrs.length>1){
     h += '<div class="ride"><div class="cap">Heart rate through the ride</div>'+
@@ -906,6 +964,85 @@ function viewSession(id){
          (e.typed.length>1?"were":"was")+' entered by hand.' : 'Nothing else was entered.')+'</div>';
   }
   return h+'</div>';
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   STINTS
+   A half mile is 804.7 m — the 800 m, ridden. The bike screen is
+   built around that one distance so the times stay comparable, and
+   the target is a fixed demand: level 16, half a mile, under 1:40.
+   ══════════════════════════════════════════════════════════════════ */
+const STINT_MI   = 0.5;
+const STINT_TOL  = 0.06;
+const TARGET_LVL = 16;
+const TARGET_SEC = 100;
+
+const isStint = e => e.mi && Math.abs(e.mi - STINT_MI) <= STINT_TOL;
+const secsOf  = e => e.secs || Math.round((e.hold || 0) * 60);
+const mmss    = t => t ? Math.floor(t/60)+":"+pad(Math.round(t%60)) : "\u2014";
+const maxHR   = e => e.hr_max || null;
+
+/* fastest stint at a given level, or overall when lvl is null */
+function bestStint(exId, lvl){
+  const c = setsOf(exId).filter(e => isStint(e) && secsOf(e) > 0 &&
+                                     (lvl == null || Number(e.w) === lvl));
+  if(!c.length) return null;
+  return c.reduce((a, b) => secsOf(a) <= secsOf(b) ? a : b);
+}
+
+function stintRow(m, e){
+  const armed = ARMED === e.id;
+  const t = secsOf(e), hx = maxHR(e);
+  const pb = bestStint(e.ex, Number(e.w));
+  return '<div class="set stint'+(armed?" on":"")+'" data-a="armset" data-id="'+e.id+'">'+
+    '<span class="tm">'+clock(e.ts)+'</span>'+
+    '<span class="fg">'+
+      '<b class="t">'+mmss(t)+'</b>'+
+      '<span class="mi">'+num(e.mi)+' mi</span>'+
+      '<span class="lv">L'+num(e.w)+'</span>'+
+      (hx ? '<span class="hx">&#9650; '+hx+'</span>'
+          : (e.hr ? '<span class="hx dim">avg '+e.hr+'</span>' : ''))+
+      (pb && pb.id===e.id ? '<span class="pbt">best L'+num(e.w)+'</span>' : '')+
+    '</span>'+
+    (armed && e.hrs ? '<button class="del ride-b" data-a="ride" data-id="'+e.id+'">Ride</button>' : '')+
+    (armed ? '<button class="del" data-a="voidset" data-id="'+e.id+'">Void</button>' : '')+
+    '</div>';
+}
+
+/* Target panel + the ladder of per-level bests. */
+function stintHead(id){
+  const all  = setsOf(id).filter(isStint);
+  const bAll = bestStint(id, null);
+  const b16  = bestStint(id, TARGET_LVL);
+  const gap  = b16 ? secsOf(b16) - TARGET_SEC : null;
+
+  let h = '<div class="tgt">'+
+          '<div class="tlab">Target</div>'+
+          '<div class="tbig">L'+TARGET_LVL+' &times; '+STINT_MI+' mi under '+mmss(TARGET_SEC)+'</div>';
+
+  h += '<div class="trow">'+
+       '<div class="tcell"><i>Best half mile</i><b>'+(bAll?mmss(secsOf(bAll)):"\u2014")+'</b>'+
+         '<u>'+(bAll?'L'+num(bAll.w):'not ridden yet')+'</u></div>'+
+       '<div class="tcell"><i>Best at L'+TARGET_LVL+'</i><b>'+(b16?mmss(secsOf(b16)):"\u2014")+'</b>'+
+         '<u>'+(gap!=null ? (gap>0? '+'+Math.round(gap)+'s to go' : 'target met') : 'not ridden yet')+'</u></div>'+
+       '</div>';
+
+  /* per-level ladder — only levels ridden, plus the target level always */
+  const lvls = [...new Set(all.map(e => Number(e.w)).filter(v => v > 0))];
+  if(!lvls.includes(TARGET_LVL)) lvls.push(TARGET_LVL);
+  lvls.sort((a,b) => a-b);
+  if(lvls.length){
+    h += '<div class="ladder">'+ lvls.map(v => {
+      const b = bestStint(id, v);
+      return '<div class="rung'+(v===TARGET_LVL?" goal":"")+(b?"":" none")+'">'+
+             '<i>L'+v+'</i><b>'+(b?mmss(secsOf(b)):"\u2014")+'</b></div>';
+    }).join("") + '</div>';
+  }
+
+  h += '<div class="tnote">'+all.length+' half-mile stint'+(all.length===1?"":"s")+' recorded. '+
+       'Level and distance are fixed, so the time is the reading.</div>';
+  return h + '</div>';
 }
 
 function setRow(m,e){
