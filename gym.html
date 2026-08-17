@@ -147,7 +147,19 @@ button{background:none;border:0;cursor:pointer}
   border:1px solid var(--line);border-radius:13px;padding:13px 6px;margin-bottom:9px;text-align:left}
 .srow:active{background:var(--surf2)}
 .srow .c4 b{font-size:17px}
-.srow .chev{flex:0 0 auto;padding:0 10px 0 4px;color:var(--dim);font-size:21px;font-weight:700}
+.swrap{position:relative;margin-bottom:9px}
+.swrap .srow{margin-bottom:0;padding-right:44px;width:100%}
+.swrap.on .srow{border-color:var(--cardio);border-bottom-left-radius:0;border-bottom-right-radius:0}
+.sdot{position:absolute;top:0;right:0;height:100%;width:42px;background:none;
+  color:var(--dim);font-size:20px;font-weight:800;line-height:1}
+.sdot:active{color:var(--tx)}
+.sacts{display:flex;gap:8px;padding:10px;background:var(--surf2);
+  border:1px solid var(--cardio);border-top:none;border-radius:0 0 13px 13px}
+.sact{flex:1;background:var(--surf);border:1px solid var(--line);border-radius:10px;
+  padding:11px 6px;font-size:13.5px;font-weight:750;color:var(--tx)}
+.sact.bad{color:#e05a4e;border-color:rgba(224,90,78,.4)}
+.sact:active{background:var(--line)}
+.ghost.thin{margin-top:10px;padding:12px;font-size:13.5px;opacity:.62}
 .pfold{margin-top:12px}
 .pfold summary{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--mut);
   text-transform:uppercase;padding:6px 3px;cursor:pointer}
@@ -773,7 +785,7 @@ function viewHome(){
        '</button>';
   h += '<div class="hxlog'+(HX_LOG&&HX_LOG.bad?" bad":"")+'">'+
        esc(HX_LOG ? HX_LOG.m : "No import attempted yet.")+'</div>';
-  h += '<div class="build">build 2026-08-16e</div>';
+  h += '<div class="build">build 2026-08-16f</div>';
   if(loadErr) h += '<div class="empty">'+esc(loadErr)+'</div>';
   return h+'</div>';
 }
@@ -812,7 +824,19 @@ function viewSplit(s){
          '</div></div>';
   });
 
-  h += '</div><button class="ghost" data-a="newex" data-s="'+s+'">+ Add movement</button>';
+  h += '</div>';
+  /* On cardio the whole loop is: import the file, dial the two numbers the file
+     cannot know. Adding a movement is a rare, one-time act — it lives under the
+     \u22ef menu so it stops competing with the thing done every session. */
+  const bike = ids.find(id => EX[id] && EX[id].s==="cardio" && EX[id].mi && EX[id].dur);
+  if(bike){
+    h += '<button class="act a-imp lead" data-a="pickhealth" data-ex="'+bike+'">'+
+         '<b>IMPORT A RIDE</b><span>Time and heart rate come from the file. '+
+         'You enter distance and level.</span></button>'+
+         '<button class="ghost thin" data-a="newex" data-s="'+s+'">+ Add movement</button>';
+  }else{
+    h += '<button class="ghost" data-a="newex" data-s="'+s+'">+ Add movement</button>';
+  }
   return h+'</div>';
 }
 
@@ -866,13 +890,24 @@ function stintCard(id, m){
     h += '<div class="sect"><h2>Today\u2019s stints</h2>'+
          '<span class="ct">'+tod.length+'</span></div>';
     tod.forEach(e=>{
-      const act = e.hrs ? 'data-a="ride" data-id="'+e.id+'"' : 'data-a="ex" data-ex="'+id+'"';
-      h += '<button class="srow" '+act+'>'+
-        cell("Distance", num(e.mi), " mi")+
-        cell("Time", mmss(secsOf(e)), "")+
-        cell("Avg HR", (Number(e.hr)>0?e.hr:"\u2014"), "", "hr")+
-        cell("Level", "L"+num(e.w), "", "lv")+
-        '<span class="chev">&#8250;</span></button>';
+      const armed = ARMED===e.id;
+      const act = e.hrs ? 'data-a="ride" data-id="'+e.id+'"' : 'data-a="arm" data-id="'+e.id+'"';
+      h += '<div class="swrap'+(armed?' on':'')+'">'+
+        '<button class="srow" '+act+'>'+
+          cell("Distance", num(e.mi), " mi")+
+          cell("Time", mmss(secsOf(e)), "")+
+          cell("Avg HR", (Number(e.hr)>0?e.hr:"\u2014"), "", "hr")+
+          cell("Level", "L"+num(e.w), "", "lv")+
+        '</button>'+
+        '<button class="sdot" data-a="arm" data-id="'+e.id+'" aria-label="Options">&#8943;</button>'+
+        (armed
+          ? '<div class="sacts">'+
+              (e.hrs?'<button class="sact" data-a="ride" data-id="'+e.id+'">Ride</button>':'')+
+              '<button class="sact bad" data-a="voidset" data-id="'+e.id+'">Remove</button>'+
+              '<button class="sact" data-a="arm" data-id="">Cancel</button>'+
+            '</div>'
+          : '')+
+        '</div>';
     });
   }
   return h;
@@ -1220,7 +1255,8 @@ function sheetSet(){
                         ' in that file were not read.';
     const dup = healthDupe(F.ex, S.start);
     if(dup) line += '<br><span style="color:var(--pull)">A set from this session is already logged.</span>';
-    line += '<br><span style="color:var(--mut)">Level and distance are not in the file. Enter them below.</span>';
+    line += '<br><span style="color:var(--mut)">Time and heart rate came from the file and are already set. '+
+            'Level and distance are not in it \u2014 enter those below.</span>';
     h += '<div class="hint" style="border:1px dashed var(--cardio);border-radius:12px;padding:12px;'+
          'margin:-2px 0 16px;color:var(--tx);font-size:12.5px">'+line+'</div>';
   }
@@ -1229,8 +1265,10 @@ function sheetSet(){
              : stepper("w", m.bw?"Load (lb · 0 = bodyweight)":"Load (lb)","lb",5);
   /* On a preset, time and heart rate are left out: they are read off the watch,
      not chosen in advance. A preset holds only what you set — level and distance. */
-  const measured = F.mode==="preset" && m.dur && m.hr;
-  if(m.mi || F.__imp) h += stepper("mi","Distance"+(F.__imp?" · yours to enter":""),"mi",0.1);
+  /* An import already carries time and heart rate. Showing them as dials would
+     invite editing a measurement, so only the two unmeasured numbers are asked for. */
+  const measured = (F.mode==="preset" && m.dur && m.hr) || !!F.__imp;
+  if(m.mi || F.__imp) h += stepper("mi","Distance"+(F.__imp?" · off the console":""),"mi",0.1);
   if(!measured){
     h += (m.dur || F.__imp) ? stepper("hold","Time"+(F.__imp?" · from the file":""),"min",1)
        : m.iso ? stepper("hold","Hold","s",5)
@@ -1521,6 +1559,11 @@ document.addEventListener("click", ev=>{
   /* void a mis-tap — recorded as a correction, never erased */
   if(a==="ride"){ SCREEN={v:"session", id:t.dataset.id}; ARMED=null; window.__sy=0; return render(); }
   if(a==="armset"){ window.__sy=window.scrollY; ARMED = ARMED===t.dataset.id ? null : t.dataset.id; return render(); }
+  if(a==="arm"){
+    ev.stopPropagation(); window.__sy = window.scrollY;
+    const id = t.dataset.id || "";
+    ARMED = (ARMED===id || !id) ? null : id; return render();
+  }
   if(a==="voidset"){
     ev.stopPropagation();
     window.__sy = window.scrollY;
