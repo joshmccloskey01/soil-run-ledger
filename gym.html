@@ -138,6 +138,13 @@ button{background:none;border:0;cursor:pointer}
 .c4 b u{text-decoration:none;font-size:.62em;font-weight:650;color:var(--mut)}
 .c4.hr b{color:#e05a4e}
 .c4.lv b{color:#4ade80}
+.c4.cd b{color:#8b7fd4}
+.c4row.five .c4{padding:0 2px}
+.c4row.five .c4 b{font-size:17px}
+.c4row.five.sub .c4 b{font-size:14.5px}
+.srow.five .c4{padding:0 2px}
+.srow.five .c4 b{font-size:14px}
+.srow.five .c4 i{font-size:10px}
 .c4row.sub .c4 b{font-size:17px}
 .c4empty{font-size:13px;font-weight:600;color:var(--dim);margin-top:14px;text-align:center}
 .c4empty.sub{margin-top:10px}
@@ -844,6 +851,20 @@ const cell = (lab,val,unit,cls) =>
   '<div class="c4'+(cls?' '+cls:'')+'"><i>'+lab+'</i><b>'+val+
   (unit?'<u>'+unit+'</u>':'')+'</b></div>';
 
+/* Bike cadence. Calibrated on the recumbent: 14 mph = 120 spm.
+   Both legs counted, so spm = 2 x rpm. Derived from distance and time,
+   never stored — it is an interpretation of two recorded numbers. */
+const SPM_PER_MPH = 120/14;
+const cadOf = (mi, secs) => {
+  const d = Number(mi)||0, t = Number(secs)||0;
+  if(d<=0 || t<=0) return null;
+  return Math.round((d*3600/t) * SPM_PER_MPH);
+};
+const cadCell = (mi, secs, lab) => {
+  const c = cadOf(mi, secs);
+  return cell(lab||"Cadence", (c!=null?c:"\u2014"), (c!=null?" spm":""), "cd");
+};
+
 function stintCard(id, m){
   const td = todayTotals(id), av = stint7(id);
   const last = setsOf(id)[0] || null;
@@ -859,9 +880,10 @@ function stintCard(id, m){
   const src = td || (last ? {n:1, mi:Number(last.mi)||0, secs:secsOf(last),
                              hr:Number(last.hr)||null, lvl:Number(last.w)||0} : null);
   if(src){
-    h += '<div class="c4row">'+
+    h += '<div class="c4row five">'+
       cell("Distance", num(Math.round(src.mi*100)/100), " mi")+
       cell("Time", mmss(src.secs), "")+
+      cadCell(src.mi, src.secs)+
       cell("Avg HR", (src.hr!=null?src.hr:"\u2014"), src.hr!=null?" bpm":"", "hr")+
       cell("Level", "L"+num(Math.round(src.lvl)), "", "lv")+
       '</div>';
@@ -872,9 +894,10 @@ function stintCard(id, m){
   if(av){
     h += '<div class="avgblk">'+
       '<div class="avglab">7-day average \u00b7 half-mile stints only \u00b7 '+av.n+' ride'+(av.n===1?"":"s")+'</div>'+
-      '<div class="c4row sub">'+
+      '<div class="c4row sub five">'+
         cell("Distance", num(Math.round(av.mi*100)/100), " mi")+
         cell("Time", mmss(av.secs), "")+
+        cadCell(av.mi, av.secs)+
         cell("Avg HR", (av.hr!=null?Math.round(av.hr):"\u2014"), av.hr!=null?" bpm":"", "hr")+
         cell("Level", "L"+num(Math.round(av.lvl)), "", "lv")+
       '</div></div>';
@@ -893,9 +916,10 @@ function stintCard(id, m){
       const armed = ARMED===e.id;
       const act = e.hrs ? 'data-a="ride" data-id="'+e.id+'"' : 'data-a="arm" data-id="'+e.id+'"';
       h += '<div class="swrap'+(armed?' on':'')+'">'+
-        '<button class="srow" '+act+'>'+
+        '<button class="srow five" '+act+'>'+
           cell("Distance", num(e.mi), " mi")+
           cell("Time", mmss(secsOf(e)), "")+
+          cadCell(e.mi, secsOf(e))+
           cell("Avg HR", (Number(e.hr)>0?e.hr:"\u2014"), "", "hr")+
           cell("Level", "L"+num(e.w), "", "lv")+
         '</button>'+
