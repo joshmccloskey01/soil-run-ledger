@@ -255,8 +255,18 @@ button{background:none;border:0;cursor:pointer}
 .tmpk.up.x .tmpin{color:var(--speed)}
 .tmpk.up:focus-within{border-color:var(--speed)}
 .tmphint{font-size:11.5px;color:var(--mut);margin-top:7px;line-height:1.45}
-.tq{font-variant-numeric:tabular-nums;font-weight:750;color:var(--mut);font-size:.62em;letter-spacing:.02em}
-.tq.x{color:var(--speed)}
+/* the readout: three time slots stay quiet, the speed slot is chipped so the
+   unit sits on the number it belongs to instead of trailing the whole string */
+.tq{display:inline-flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;
+    font-weight:750;color:var(--mut);font-size:.68em;letter-spacing:.02em}
+.tq em{font-style:normal;font-weight:600;color:var(--dim)}
+.tq .ts{min-width:2.1em;text-align:center;color:var(--mut)}
+.tq .ts i{font-style:normal;font-size:.76em;color:var(--dim);margin-left:.5px}
+.tq .tx{min-width:2.1em;text-align:center;color:#3ddc7f;font-weight:850}
+.tq .tv{display:inline-flex;align-items:baseline;gap:2px;padding:0 5px 1px;
+    border-radius:6px;background:rgba(61,220,127,.14);border:1px solid rgba(61,220,127,.42)}
+.tq .tv b{font-size:1.3em;font-weight:850;color:#3ddc7f;letter-spacing:-.02em}
+.tq .tv i{font-style:normal;font-size:.76em;color:rgba(61,220,127,.75)}
 
 .acts{display:flex;flex-direction:column;gap:11px;margin-top:14px}
 .act{
@@ -294,11 +304,13 @@ button{background:none;border:0;cursor:pointer}
 .set.speed .tick{border-color:var(--speed);color:var(--speed)}
 .set.ramp .tick{border-color:var(--dim);color:var(--dim)}
 .set .tm{font-size:14px;color:var(--mut);font-weight:600;width:74px;flex:none}
-.set .fg{font-size:18px;font-weight:700;letter-spacing:-.015em}
+.set .fg{font-size:18px;font-weight:700;letter-spacing:-.015em;min-width:0}
 .set .fg em{font-style:normal;font-size:.78em;font-weight:600;color:var(--mut)}
-.set .tag{margin-left:auto;font-size:11px;font-weight:750;letter-spacing:.09em;
+.set .tag{margin-left:auto;flex:none;font-size:11px;font-weight:750;letter-spacing:.09em;
   text-transform:uppercase;color:var(--pull)}
 .set.ramp .tag{color:var(--dim)}
+/* a speed set was reading in the edge colour — it now matches its own tick */
+.set.speed .tag{color:var(--speed)}
 .set .del{margin-left:auto;color:#c9564c;font-size:14px;font-weight:700;padding:2px 4px;flex:none;display:none}
 .set.on .del{display:block}
 .set .del.ride-b{color:#9b86e0}
@@ -551,10 +563,26 @@ function tmpVel(t){
   const n = Number(p[2]);
   return (p[2].indexOf(".")>=0 && isFinite(n) && n>0) ? n : 0;
 }
+/* A second-slot: 0 to 9.9, resolved to a tenth. Decimals are the point — the
+   gap between no pause and a held half second is a real difference. */
+function tmpSec(s){
+  s = String(s).trim();
+  if(!/^[0-9]*\.?[0-9]+$/.test(s)) return null;
+  const n = Number(s);
+  if(!isFinite(n) || n<0 || n>9.9) return null;
+  const r = Math.round(n*10)/10;
+  return (r%1===0) ? String(r) : r.toFixed(1);   /* 0.50 -> 0.5, 2.0 -> 2 */
+}
 function tmpNorm(t){
   const p = tmpParts(t);
   if(!p) return "";
-  for(let i=0;i<4;i++){ if(i!==2 && !/^[0-9]$/.test(p[i])) return ""; }
+  const out = ["","","",""];
+  for(let i=0;i<4;i++){
+    if(i===2) continue;
+    const s = tmpSec(p[i]);
+    if(s===null) return "";
+    out[i] = s;
+  }
   let up = p[2];
   if(up!=="X" && !/^[0-9]$/.test(up)){
     if(!/^[0-9]*\.?[0-9]+$/.test(up)) return "";
@@ -564,19 +592,22 @@ function tmpNorm(t){
     up = String(Math.round(n*100)/100);       /* .40 and 0.400 both land on 0.4 */
     if(up.indexOf(".")<0) up = up+".0";       /* keep 1 -> 1.0 so it reads as speed */
   }
-  return up.length>1 ? [p[0],p[1],up,p[3]].join("|") : p[0]+p[1]+up+p[3];
+  out[2] = up;
+  /* Legacy "3120" still comes back as "3120". Any slot that outgrows one
+     character widens the whole string to pipe form. */
+  return out.some(s=>s.length>1) ? out.join("|") : out.join("");
 }
-function tmpCycle(ch, slot){
-  const ring = (slot===2) ? ["0","1","2","3","4","5","X"] : ["0","1","2","3","4","5"];
-  const i = ring.indexOf(String(ch).toUpperCase());
-  return ring[(i<0?0:i+1) % ring.length];
-}
+/* The unit rides with its own slot. Three slots read as seconds, one may read
+   as speed, and the difference is visible without reading the string. */
 function tmpTag(t){
   const p = tmpParts(tmpNorm(t));
   if(!p) return "";
   const v = tmpVel(t);
-  return ' <span class="tq'+((p[2]==="X"||v)?" x":"")+'">'+
-         p.join("\u00b7")+(v?" m/s":"")+'</span>';
+  const sec = i => '<span class="ts">'+p[i]+'<i>s</i></span>';
+  const mid = v ? '<span class="tv"><b>'+p[2]+'</b><i>m/s</i></span>'
+                : (p[2]==="X" ? '<span class="tx">X</span>' : sec(2));
+  return ' <span class="tq">'+sec(0)+'<em>\u00b7</em>'+sec(1)+
+         '<em>\u00b7</em>'+mid+'<em>\u00b7</em>'+sec(3)+'</span>';
 }
 
 function presetOf(id, kind, v){
@@ -1400,18 +1431,19 @@ function sheetSet(){
   const tp = tmpParts(tmp) || ["3","1","2","0"];
   const uv = tmpVel(tmp);
   h += '<div class="fld"><label>Tempo</label><div class="tmprow">'+
-       tp.map((c,i)=>
-         i===2
-         ? '<div class="tmpk up'+((c==="X"||uv)?" x":"")+'">'+
-           '<input id="f_up" class="tmpin" type="text" inputmode="decimal" '+
-           'autocomplete="off" autocapitalize="characters" spellcheck="false" '+
-           'maxlength="4" value="'+esc(c)+'">'+
-           '<span>up'+(uv?" &middot; m/s":"")+'</span></div>'
-         : '<button class="tmpk" data-a="tmp" data-i="'+i+'">'+
-           '<b>'+c+'</b><span>'+TMP_SLOTS[i]+'</span></button>').join("")+
+       tp.map((c,i)=>{
+         const isUp = (i===2);
+         return '<div class="tmpk'+(isUp?" up":"")+((isUp&&(c==="X"||uv))?" x":"")+'">'+
+           '<input id="f_t'+i+'" class="tmpin" type="text" inputmode="decimal" '+
+           'autocomplete="off" '+(isUp?'autocapitalize="characters" ':'')+
+           'spellcheck="false" maxlength="4" value="'+esc(c)+'">'+
+           '<span>'+TMP_SLOTS[i]+(isUp?(uv?" &middot; m/s":""):" &middot; s")+
+           '</span></div>';
+       }).join("")+
        '</div><div class="tmphint">Down &middot; pause &middot; up &middot; top. '+
-       'Down, pause and top are seconds &mdash; tap to change. '+
-       'The <b>up</b> key is typed: a digit for seconds, <b>X</b> for explode, '+
+       'Down, pause and top are seconds and take decimals &mdash; <b>0.5</b> is a '+
+       'held half second, <b>0</b> is none. '+
+       'The <b>up</b> key takes a digit for seconds, <b>X</b> for explode, '+
        'or a decimal for average bar speed in m/s &mdash; <b>0.4</b>.</div></div>';
 
   /* three saves, one dial */
@@ -1554,14 +1586,20 @@ function hxInput(){
   return el;
 }
 
-/* The up slot is the only typed key. A value that will not normalise is left
-   on screen and simply not folded in, so a half-typed "0." is not destroyed
-   by a re-render and never reaches a saved record. */
-function readUp(){
-  const el = document.getElementById("f_up");
-  if(!el) return;
-  const p = tmpParts(tmpNorm(F.tmp) || TMP_DEF[F.pkind||"base"] || "3120") || ["3","1","2","0"];
-  const n = tmpNorm([p[0], p[1], String(el.value||"").trim().toUpperCase(), p[3]].join("|"));
+/* All four keys are typed. A value that will not normalise is left on screen
+   and simply not folded in, so a half-typed "0." is not destroyed by a
+   re-render and never reaches a saved record. */
+function readTmp(){
+  const raw = tmpParts(tmpNorm(F.tmp) || TMP_DEF[F.pkind||"base"] || "3120") || ["3","1","2","0"];
+  let seen = 0;
+  for(let i=0;i<4;i++){
+    const el = document.getElementById("f_t"+i);
+    if(!el) continue;
+    seen++;
+    raw[i] = String(el.value||"").trim().toUpperCase();
+  }
+  if(!seen) return;
+  const n = tmpNorm(raw.join("|"));
   if(n) F.tmp = n;
 }
 function readFields(){
@@ -1572,7 +1610,7 @@ function readFields(){
   if(F.__needLvl && Number(F.w)>0) F.__needLvl = 0;
   const n = document.getElementById("f_n"); if(n) F.n = n.value.trim();
   const g = document.getElementById("f_g"); if(g) F.g = g.value.trim();
-  readUp();
+  readTmp();
   clampLevel();
 }
 /* Difficulty is a dial position, not a load: 1..16, whole numbers only. */
@@ -1638,15 +1676,6 @@ document.addEventListener("click", ev=>{
          tmp: tmpNorm(p.tmp) || TMP_DEF[k] || "3120"};
     SHEET = sheetSet; return render();
   }
-  if(a==="tmp"){
-    readFields();
-    const i = Number(t.dataset.i);
-    const cur = tmpParts(tmpNorm(F.tmp) || TMP_DEF[F.pkind||"base"] || "3120") || ["3","1","2","0"];
-    cur[i] = tmpCycle(cur[i], i);
-    F.tmp = tmpNorm(cur.join("|")) || F.tmp;
-    return render();
-  }
-
   if(a==="inc"||a==="dec"){
     readFields();
     const k = t.dataset.k, st = Number(t.dataset.st);
@@ -1810,7 +1839,7 @@ document.addEventListener("change", ev=>{
 
 /* keep typed values through re-render */
 document.addEventListener("input", ev=>{
-  if(ev.target.id==="f_up") return readUp();   /* text, not a number */
+  if(/^f_t[0-3]$/.test(ev.target.id||"")) return readTmp();  /* text, not a number */
   const k = ev.target.dataset.k;
   if(k) F[k] = Number(ev.target.value)||0;
 });
