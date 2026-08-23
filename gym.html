@@ -247,6 +247,13 @@ button{background:none;border:0;cursor:pointer}
 .tmpk b{display:block;font-size:26px;font-weight:850;line-height:1;color:var(--tx)}
 .tmpk span{display:block;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);margin-top:5px}
 .tmpk.x b{color:var(--speed)}
+/* the up slot is typed, not tapped: a digit, X, or a decimal m/s */
+.tmpin{display:block;width:100%;border:0;background:transparent;text-align:center;
+       font-family:inherit;font-size:24px;font-weight:850;line-height:1;color:var(--tx);
+       padding:1px 0 0;-webkit-appearance:none;appearance:none;outline:none;
+       font-variant-numeric:tabular-nums}
+.tmpk.up.x .tmpin{color:var(--speed)}
+.tmpk.up:focus-within{border-color:var(--speed)}
 .tmphint{font-size:11.5px;color:var(--mut);margin-top:7px;line-height:1.45}
 .tq{font-variant-numeric:tabular-nums;font-weight:750;color:var(--mut);font-size:.62em;letter-spacing:.02em}
 .tq.x{color:var(--speed)}
@@ -521,11 +528,43 @@ function curVar(id){
    different intent. Stored on the preset as a 4-character string.     */
 const TMP_SLOTS = ["down","pause","up","top"];
 const TMP_DEF   = { base:"3120", speed:"31X0", edge:"32X0" };
+
+/* Two storage forms, both four slots:
+     "3120"        legacy fixed width, one character per slot
+     "3|1|0.4|0"   pipe form, used only when the up slot needs more than one
+                   character — i.e. when it holds a speed in m/s.
+   Old records keep reading correctly; new ones only widen when they must. */
+function tmpParts(t){
+  t = String(t||"").toUpperCase().trim();
+  if(!t) return null;
+  if(t.indexOf("|")>=0){
+    const p = t.split("|").map(s=>s.trim());
+    return p.length===4 ? p : null;
+  }
+  t = t.replace(/[^0-9X]/g,"");
+  return t.length===4 ? t.split("") : null;
+}
+/* The up slot alone may carry a speed. Returns 0 when it does not. */
+function tmpVel(t){
+  const p = tmpParts(t);
+  if(!p) return 0;
+  const n = Number(p[2]);
+  return (p[2].indexOf(".")>=0 && isFinite(n) && n>0) ? n : 0;
+}
 function tmpNorm(t){
-  t = String(t||"").toUpperCase().replace(/[^0-9X]/g,"");
-  if(t.length!==4) return "";
-  for(let i=0;i<4;i++) if(t[i]==="X" && i!==2) return "";
-  return t;
+  const p = tmpParts(t);
+  if(!p) return "";
+  for(let i=0;i<4;i++){ if(i!==2 && !/^[0-9]$/.test(p[i])) return ""; }
+  let up = p[2];
+  if(up!=="X" && !/^[0-9]$/.test(up)){
+    if(!/^[0-9]*\.?[0-9]+$/.test(up)) return "";
+    const n = Number(up);
+    /* A bar that moves faster than 4 m/s is a typo, not a lift. */
+    if(!isFinite(n) || n<=0 || n>4) return "";
+    up = String(Math.round(n*100)/100);       /* .40 and 0.400 both land on 0.4 */
+    if(up.indexOf(".")<0) up = up+".0";       /* keep 1 -> 1.0 so it reads as speed */
+  }
+  return up.length>1 ? [p[0],p[1],up,p[3]].join("|") : p[0]+p[1]+up+p[3];
 }
 function tmpCycle(ch, slot){
   const ring = (slot===2) ? ["0","1","2","3","4","5","X"] : ["0","1","2","3","4","5"];
@@ -533,9 +572,11 @@ function tmpCycle(ch, slot){
   return ring[(i<0?0:i+1) % ring.length];
 }
 function tmpTag(t){
-  t = tmpNorm(t);
-  if(!t) return "";
-  return ' <span class="tq'+(t[2]==="X"?" x":"")+'">'+t.split("").join("\u00b7")+'</span>';
+  const p = tmpParts(tmpNorm(t));
+  if(!p) return "";
+  const v = tmpVel(t);
+  return ' <span class="tq'+((p[2]==="X"||v)?" x":"")+'">'+
+         p.join("\u00b7")+(v?" m/s":"")+'</span>';
 }
 
 function presetOf(id, kind, v){
@@ -1356,12 +1397,22 @@ function sheetSet(){
 
   /* Tempo is part of the preset: same load, different intent. */
   const tmp = tmpNorm(F.tmp) || TMP_DEF[F.pkind||"base"] || "3120";
+  const tp = tmpParts(tmp) || ["3","1","2","0"];
+  const uv = tmpVel(tmp);
   h += '<div class="fld"><label>Tempo</label><div class="tmprow">'+
-       tmp.split("").map((c,i)=>
-         '<button class="tmpk'+(c==="X"?" x":"")+'" data-a="tmp" data-i="'+i+'">'+
-         '<b>'+c+'</b><span>'+TMP_SLOTS[i]+'</span></button>').join("")+
-       '</div><div class="tmphint">Down &middot; pause &middot; up &middot; top, in seconds. '+
-       'Tap to change. The <b>up</b> key also takes <b>X</b> &mdash; explode.</div></div>';
+       tp.map((c,i)=>
+         i===2
+         ? '<div class="tmpk up'+((c==="X"||uv)?" x":"")+'">'+
+           '<input id="f_up" class="tmpin" type="text" inputmode="decimal" '+
+           'autocomplete="off" autocapitalize="characters" spellcheck="false" '+
+           'maxlength="4" value="'+esc(c)+'">'+
+           '<span>up'+(uv?" &middot; m/s":"")+'</span></div>'
+         : '<button class="tmpk" data-a="tmp" data-i="'+i+'">'+
+           '<b>'+c+'</b><span>'+TMP_SLOTS[i]+'</span></button>').join("")+
+       '</div><div class="tmphint">Down &middot; pause &middot; up &middot; top. '+
+       'Down, pause and top are seconds &mdash; tap to change. '+
+       'The <b>up</b> key is typed: a digit for seconds, <b>X</b> for explode, '+
+       'or a decimal for average bar speed in m/s &mdash; <b>0.4</b>.</div></div>';
 
   /* three saves, one dial */
   h += '<button class="save c-push" data-a="savepreset" data-k="base">Save base preset</button>'+
@@ -1503,6 +1554,16 @@ function hxInput(){
   return el;
 }
 
+/* The up slot is the only typed key. A value that will not normalise is left
+   on screen and simply not folded in, so a half-typed "0." is not destroyed
+   by a re-render and never reaches a saved record. */
+function readUp(){
+  const el = document.getElementById("f_up");
+  if(!el) return;
+  const p = tmpParts(tmpNorm(F.tmp) || TMP_DEF[F.pkind||"base"] || "3120") || ["3","1","2","0"];
+  const n = tmpNorm([p[0], p[1], String(el.value||"").trim().toUpperCase(), p[3]].join("|"));
+  if(n) F.tmp = n;
+}
 function readFields(){
   ["w","reps","hold","hr","mi"].forEach(k=>{
     const el = document.getElementById("f_"+k);
@@ -1511,6 +1572,7 @@ function readFields(){
   if(F.__needLvl && Number(F.w)>0) F.__needLvl = 0;
   const n = document.getElementById("f_n"); if(n) F.n = n.value.trim();
   const g = document.getElementById("f_g"); if(g) F.g = g.value.trim();
+  readUp();
   clampLevel();
 }
 /* Difficulty is a dial position, not a load: 1..16, whole numbers only. */
@@ -1579,9 +1641,9 @@ document.addEventListener("click", ev=>{
   if(a==="tmp"){
     readFields();
     const i = Number(t.dataset.i);
-    const cur = (tmpNorm(F.tmp) || TMP_DEF[F.pkind||"base"] || "3120").split("");
+    const cur = tmpParts(tmpNorm(F.tmp) || TMP_DEF[F.pkind||"base"] || "3120") || ["3","1","2","0"];
     cur[i] = tmpCycle(cur[i], i);
-    F.tmp = cur.join("");
+    F.tmp = tmpNorm(cur.join("|")) || F.tmp;
     return render();
   }
 
@@ -1748,6 +1810,7 @@ document.addEventListener("change", ev=>{
 
 /* keep typed values through re-render */
 document.addEventListener("input", ev=>{
+  if(ev.target.id==="f_up") return readUp();   /* text, not a number */
   const k = ev.target.dataset.k;
   if(k) F[k] = Number(ev.target.value)||0;
 });
