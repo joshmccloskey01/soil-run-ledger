@@ -67,6 +67,13 @@ button{background:none;border:0;cursor:pointer}
 .c-cardio{background:var(--cardio)}
 .c-isom{background:var(--isom)}
 .c-yoga{background:var(--yoga)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.chip{padding:11px 14px;border-radius:11px;font-size:12px;font-weight:800;letter-spacing:.08em;
+  background:var(--surf);border:1px solid var(--line);color:var(--mut)}
+.chip:active{background:var(--surf2);color:var(--tx)}
+.chip.k-push{border-color:var(--push)} .chip.k-pull{border-color:var(--pull)}
+.chip.k-legs{border-color:var(--legs)} .chip.k-cardio{border-color:var(--cardio)}
+.chip.k-isom{border-color:var(--isom)} .chip.k-yoga{border-color:var(--yoga)}
 .himp{display:block;width:100%;margin-top:16px;padding:16px 18px;text-align:left;border-radius:var(--r);
   background:transparent;border:1px dashed var(--cardio);color:var(--tx)}
 .himp:active{background:var(--surf)}
@@ -450,6 +457,7 @@ const EX_SEED = {
        vars:["Planche lean","Tuck planche","Advanced tuck planche","Planche"]},
   bp:{n:"Bench press",s:"push",g:"Press"},
   pu:{n:"Push-ups",s:"push",g:"Press",bw:1},
+  pth:{n:"Press to head",s:"push",g:"Press"},
   sap:{n:"Standing single-arm press",s:"push",g:"Press"},
   blr:{n:"Banded lateral raise",s:"push",g:"Shoulders",bw:1},
   wlr:{n:"Weighted lateral raise",s:"push",g:"Shoulders"},
@@ -457,6 +465,8 @@ const EX_SEED = {
   fle:{n:"Ring front lever",s:"pull",g:"Skill strength",iso:1,bw:1,
        vars:["Tuck lever","Advanced tuck lever","Single-leg lever","Front lever"]},
   pc:{n:"Power clean",s:"pull",g:"Power"},
+  sna:{n:"Snatch",s:"pull",g:"Power"},
+  bex:{n:"Back extension",s:"pull",g:"Hinge",bw:1},
   sld:{n:"Straight-leg deadlift",s:"pull",g:"Hinge"},
   wpu:{n:"Neutral grip pull-up",s:"pull",g:"Vertical pull",bw:1},
   rpu:{n:"Rings pull-up",s:"pull",g:"Vertical pull",bw:1},
@@ -466,6 +476,7 @@ const EX_SEED = {
   /* off the list — history kept, restorable from the Pull ⋯ menu */
   rap:{n:"Ring archer pull-up",s:"pull",g:"Vertical pull",bw:1,hidden:1},
   oap:{n:"One-arm pull-up",s:"pull",g:"Vertical pull",bw:1,hidden:1},
+  ohs:{n:"Overhead squat",s:"legs",g:"Squat"},
   bsq:{n:"Belt squat",s:"legs",g:"Squat"},
   tsl:{n:"Trap bar single-leg DL",s:"legs",g:"Hinge",hidden:1},
   gbm:{n:"Glute bridge machine",s:"legs",g:"Hip"},
@@ -520,6 +531,14 @@ let EX = {};
 const inSplit = s => Object.keys(EX)
   .filter(k=>EX[k].s===s && !EX[k].hidden)
   .sort((a,b)=>(EX[a].ord??900)-(EX[b].ord??900));
+
+/* ══════════════════════════════════════════════════════════════════
+   THE TRACKED LIST — what the app opens on, in priority order.
+   Everything else still exists and is still reachable; it is just not
+   what the app is claiming to develop. Edit this line to reorder.
+   ══════════════════════════════════════════════════════════════════ */
+const TRACKED = ["pc","sna","pth","bex","fle","lcu","lex","ctp"];
+const tracked = () => TRACKED.filter(id => EX[id]);
 
 /* ══════════════════════════════════════════════════════════════════
    PRESETS — new append-only species. Latest per exercise is current.
@@ -886,22 +905,27 @@ function render(){
   window.scrollTo(0, window.__sy||0);
 }
 
+/* The app opens on the tracked list. No category screen in front of it —
+   the first thing on the glass is the first movement of the day. */
 function viewHome(){
+  const ids = tracked();
   let h = '<div class="bar"><h1>Gym</h1>'+
           '<button class="icon" data-a="settings" aria-label="Settings">&#9881;</button></div>'+
-          '<div class="wrap"><div class="cats">';
+          '<div class="wrap"><div class="list">';
+  if(!ids.length) h += '<div class="empty">Nothing tracked. Open a group below.</div>';
+  ids.forEach(id=>{ h += movementRow(id); });
+  h += '</div>';
+
+  /* Everything not on the list is still here, one tap away. */
+  h += '<div class="chips">';
   ["push","pull","legs","cardio","isom","yoga"].forEach(s=>{
-    h += '<button class="cat c-'+s+'" data-a="split" data-s="'+s+'">'+
-         '<b>'+SPLITS[s].toUpperCase()+'</b><span>'+SUBTITLE[s]+'</span></button>';
+    h += '<button class="chip k-'+s+'" data-a="split" data-s="'+s+'">'+
+         SPLITS[s].toUpperCase()+'</button>';
   });
   h += '</div>';
-  h += '<button class="himp" data-a="pickhealth">'+
-       '<b>IMPORT A HEALTH EXPORT</b>'+
-       '<span>Reads time and heart rate out of the .zip. You enter level and distance.</span>'+
-       '</button>';
-  h += '<div class="hxlog'+(HX_LOG&&HX_LOG.bad?" bad":"")+'">'+
-       esc(HX_LOG ? HX_LOG.m : "No import attempted yet.")+'</div>';
-  h += '<div class="build">build 2026-08-16f</div>';
+
+  if(HX_LOG) h += '<div class="hxlog'+(HX_LOG.bad?" bad":"")+'">'+esc(HX_LOG.m)+'</div>';
+  h += '<div class="build">build 2026-08-27a</div>';
   if(loadErr) h += '<div class="empty">'+esc(loadErr)+'</div>';
   return h+'</div>';
 }
@@ -914,11 +938,32 @@ function viewSplit(s){
           '<div class="wrap"><div class="list">';
   if(!ids.length) h += '<div class="empty">No movements here yet. Add one below.</div>';
 
-  ids.forEach(id=>{
+  ids.forEach(id=>{ h += movementRow(id); });
+
+  h += '</div>';
+  /* On cardio the whole loop is: import the file, dial the two numbers the file
+     cannot know. Adding a movement is a rare, one-time act — it lives under the
+     \u22ef menu so it stops competing with the thing done every session. */
+  const bike = ids.find(id => EX[id] && EX[id].s==="cardio" && EX[id].mi && EX[id].dur);
+  if(bike){
+    h += '<button class="act a-imp lead" data-a="pickhealth" data-ex="'+bike+'">'+
+         '<b>IMPORT A RIDE</b><span>Time and heart rate come from the file. '+
+         'You enter distance and level.</span></button>'+
+         '<button class="ghost thin" data-a="newex" data-s="'+s+'">+ Add movement</button>';
+  }else{
+    h += '<button class="ghost" data-a="newex" data-s="'+s+'">+ Add movement</button>';
+  }
+  return h+'</div>';
+}
+
+/* One movement, as it appears in any list. Home and split share this so the
+   landing screen is the split screen — same row, same three buttons. */
+function movementRow(id){
     const m = EX[id];
+    let h = "";
 
     /* Cardio movements get the stint card instead of the preset row. */
-    if(m.s==="cardio" && m.mi && m.dur){ h += stintCard(id, m); return; }
+    if(m.s==="cardio" && m.mi && m.dur){ return stintCard(id, m); }
 
     const pb = presetOf(id,"base"), ps = presetOf(id,"speed"), pe = presetOf(id,"edge");
     const n  = setsOf(id).filter(e=>dayKey(e.ts)===todayK()).length;
@@ -940,22 +985,7 @@ function viewSplit(s){
            '<button class="qb q-speed'+(ps?'':' off')+'" data-a="'+(ps?'speed':'editpreset')+'" data-k="speed" data-ex="'+id+'">Speed</button>'+
            '<button class="qb q-edge'+(pe?'':' off')+'" data-a="'+(pe?'edge':'editpreset')+'" data-k="edge" data-ex="'+id+'">Edge</button>'+
          '</div></div>';
-  });
-
-  h += '</div>';
-  /* On cardio the whole loop is: import the file, dial the two numbers the file
-     cannot know. Adding a movement is a rare, one-time act — it lives under the
-     \u22ef menu so it stops competing with the thing done every session. */
-  const bike = ids.find(id => EX[id] && EX[id].s==="cardio" && EX[id].mi && EX[id].dur);
-  if(bike){
-    h += '<button class="act a-imp lead" data-a="pickhealth" data-ex="'+bike+'">'+
-         '<b>IMPORT A RIDE</b><span>Time and heart rate come from the file. '+
-         'You enter distance and level.</span></button>'+
-         '<button class="ghost thin" data-a="newex" data-s="'+s+'">+ Add movement</button>';
-  }else{
-    h += '<button class="ghost" data-a="newex" data-s="'+s+'">+ Add movement</button>';
-  }
-  return h+'</div>';
+  return h;
 }
 
 const cell = (lab,val,unit,cls) =>
