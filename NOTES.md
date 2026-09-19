@@ -236,3 +236,54 @@ Append-only. Never rewrite an entry. Four parts, all required.
   describes, the `.pyc` would become a real provenance problem rather than a
   cosmetic one, and the frozen commit could no longer be treated as a clean
   reference. Checked whenever `3e18e8d` is next checked out and run.
+
+## 2026-09-19 (sixth entry) — context-creation cause identified: Metal init, not a parameter
+
+**Checked**
+- Josh's Trial 1 stderr: `ggml_metal_init: picking default device: (null)` ->
+  `failed to create command queue` -> `ggml_backend_metal_device_init_backend:
+  error: failed to allocate context` -> `llama_init_from_model: failed to
+  initialize the context: failed to initialize backend`.
+- Preflight recorded: Python 3.9.6, arm64, llama_cpp 0.3.35, probe-venv.
+- llama.cpp source at `e613ef2`: `src/llama-context.cpp` lines 331-338 loop over
+  `model.devices` calling `ggml_backend_dev_init` and throw on null, with no
+  `n_gpu_layers` condition; `src/llama.cpp` `llama_prepare_model_devices` fills
+  `model->devices` from enumerated GPUs, also without consulting `n_gpu_layers`.
+- `inspect.signature(Llama.__init__)` in 0.3.35: exposes `n_gpu_layers`,
+  `split_mode`, `main_gpu`, `tensor_split`. Does not expose `devices`.
+
+**Found**
+- `n_gpu_layers=0` governs layer offload only. It does not prevent Metal being
+  enumerated or its backend being initialized, and a failed Metal init is fatal
+  to context creation regardless. Josh identified this from the log before I
+  verified it at source.
+- The failure is Metal device acquisition returning null on a machine that has a
+  GPU. That points at the process lacking access to the GPU / logged-in GUI
+  session rather than at the model, the build, or any harness parameter.
+- `n_ctx_seq (512) < n_ctx_train (1048576)` is an informational warning, not the
+  failure. My non-default `n_ctx=512` is cleared as the cause.
+- llama.cpp honours an explicit `params.devices` list, but llama-cpp-python
+  0.3.35 never sets it, so there is no Python-level way to avoid Metal init.
+
+**Failed**
+- My Trial 1 was labelled "CPU-only" and was not CPU-only. `n_gpu_layers=0` does
+  not produce a CPU-only run in this llama.cpp, so the trial did not test the
+  category it claimed, and the protocol's "CPU-only FAIL -> stop" branch fired on
+  a verdict that had no such meaning. Fourth instance this session of my
+  apparatus reporting a category it had not established. The previous three:
+  `llm.scores` returning zeros, `verbose=False` eating the diagnostic, and
+  running trial 1 after an import error and calling it a failure.
+- Root cause is still not isolated: session context (no GUI/window-server
+  access) versus Metal genuinely unavailable on this machine has not been
+  separated. The discriminating probe -- identical command from a
+  user-opened Terminal window -- has not been run.
+- Nothing established about RWKV state retention. No gate has run. No
+  declaration exists.
+
+**Would kill it**
+- Metal initializing in a user-opened Terminal window would establish the fault
+  as session context and clear the build, the model and my parameters entirely.
+- `(null)` again in that window would mean Metal is unavailable to this runtime
+  on this machine, and the only remaining route is a build with Metal compiled
+  out -- a version change, which is Josh's decision, not mine.
+- Checked on Josh's next run.
