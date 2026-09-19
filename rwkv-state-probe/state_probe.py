@@ -221,6 +221,37 @@ class Engine:
             )
         return ids[0]
 
+    def verify_alignment(self, query, value_str, candidate_id):
+        """
+        Apparatus validation, run at declare time, before any experiment.
+
+        The discriminator assumes the first token generated after `query` is
+        the candidate. Two ways that silently breaks:
+          - the tokenizer merges across the query/value boundary, so `query`
+            is not a token prefix of `query + value` at all;
+          - `value` does not begin with the candidate token (e.g. "7319"
+            tokenizes as a single unit, or as "73" + "19", not "7" + ...).
+        Either way D would compare a token the model was never going to emit
+        against another it was never going to emit, and report a clean number.
+        """
+        q = self.tok(query)
+        full = self.tok(query + value_str)
+        if full[: len(q)] != q:
+            return False, {"reason": "tokenizer merges across the query/value boundary",
+                           "query_tokens": q, "full_tokens": full}
+        if len(full) <= len(q):
+            return False, {"reason": "value contributes no tokens",
+                           "query_tokens": q, "full_tokens": full}
+        nxt = full[len(q)]
+        return nxt == candidate_id, {
+            "reason": "ok" if nxt == candidate_id else "first value token is not the candidate",
+            "query_tokens": q,
+            "next_token_id": nxt,
+            "next_token_str": self.llm.detokenize([nxt]).decode("utf-8", "replace"),
+            "candidate_id": candidate_id,
+            "full_tokens": full,
+        }
+
     # -- state -------------------------------------------------------------
 
     def reset(self):
@@ -354,6 +385,22 @@ def build_declaration(eng, args):
         if p["correct_id"] == p["wrong_id"]:
             raise ValueError(f"probe {name}: candidates tokenize identically")
 
+    # Apparatus validation BEFORE the experiment. This is not outcome selection:
+    # it checks that the discriminator compares the tokens it claims to compare.
+    align = {}
+    rel = probes["relation"]
+    for label, value, cand in (("state_A", "7319", rel["correct_id"]),
+                               ("state_B", "4412", rel["wrong_id"])):
+        ok, detail = eng.verify_alignment(rel["query"], value, cand)
+        align[label] = {"pass": ok, **detail}
+    if not all(a["pass"] for a in align.values()):
+        raise SystemExit(
+            "REFUSING to declare: probe/tokenizer alignment failed.\n"
+            + json.dumps(align, indent=2)
+            + "\n\nThe discriminator would compare tokens the model was never going "
+              "to emit. Pick candidates that match the tokenization above, then declare."
+        )
+
     recurrent, arch = eng.arch_is_recurrent()
 
     decl = {
@@ -371,12 +418,32 @@ def build_declaration(eng, args):
             **eng.cfg,
         },
         "probes": probes,
+        "probe_alignment": align,
         "thresholds": {
+            "jitter_n": 20,
+            "jitter_n_provenance": "frozen before the run. Fixed now so the noise floor "
+                                   "cannot move by choosing how many repetitions to collect "
+                                   "after seeing the values.",
             "noise_k": 3.0,
+            "noise_k_meaning": "CONSERVATIVE POLICY MULTIPLE OF THE OBSERVED RANGE "
+                               "(max - min) over jitter_n repeats. This is NOT a 3-sigma "
+                               "threshold and carries no statistical interpretation. "
+                               "spread_stdev is recorded alongside so a later declaration "
+                               "can adopt a sigma-based rule with stated provenance.",
             "noise_k_provenance": "policy constant, set by Claude 2026-09-19, no empirical "
-                                  "basis. Every gate margin must exceed noise_k * the jitter "
-                                  "spread. Replaceable by a better-founded value in a NEW "
-                                  "declaration; this one stays in the chain.",
+                                  "basis. Replaceable in a NEW declaration; this one stays "
+                                  "in the chain.",
+            "min_margin_abs": 0.5,
+            "min_margin_abs_provenance": "policy constant, arbitrary, set by Claude "
+                                         "2026-09-19, in logit units. Exists because a "
+                                         "deterministic runtime yields spread == 0.0, which "
+                                         "would collapse the required margin to zero and "
+                                         "reinstate the exact failure the noise floor was "
+                                         "added to prevent. required_margin = "
+                                         "max(noise_k * range, min_margin_abs). When this "
+                                         "is the binding term the result is flagged, because "
+                                         "the gate is then resting on an arbitrary number "
+                                         "rather than a measured floor.",
             "floor_requires": "D(state_A) - D(fresh) > noise_k * jitter_spread. An absolute "
                               "threshold of 0.0 would pass on noise: a margin smaller than the "
                               "runtime's own wobble is not a detection. This is why jitter runs "
@@ -404,7 +471,7 @@ def build_declaration(eng, args):
 
 # ---------------------------------------------------------------- battery
 
-def run_jitter(eng, decl, reps=5):
+def run_jitter(eng, decl, reps=None):
     """
     NOT in the original spec. Added because 'restart equivalence within a
     predeclared tolerance' cannot be declared without knowing the runtime's
@@ -412,6 +479,7 @@ def run_jitter(eng, decl, reps=5):
     is floating-point reduction-order noise, not state loss. This is the
     detection floor for the restart probe.
     """
+    reps = reps or decl["thresholds"]["jitter_n"]
     p = decl["probes"]["relation"]
     base = p["state_A"]
 
@@ -429,15 +497,27 @@ def run_jitter(eng, decl, reps=5):
     for _ in range(reps):
         vals.append(measure(eng, lambda: eng.restore(snap), p["query"],
                             p["correct_id"], p["wrong_id"]))
-    spread = max(vals) - min(vals)
-    return {"values": vals, "spread": spread,
-            "suggested_restart_tol": max(spread * 10.0, 1e-3)}
+    rng = max(vals) - min(vals)
+    mean = sum(vals) / len(vals)
+    var = sum((v - mean) ** 2 for v in vals) / max(1, len(vals) - 1)
+    stdev = var ** 0.5
+    return {"n": reps, "spread_range": rng, "spread_stdev": stdev, "mean": mean,
+            "values": vals, "deterministic": rng == 0.0,
+            "suggested_restart_tol": max(rng * 10.0, 1e-3)}
+
+
+def required_margin(decl, spread_range):
+    """max(noise_k * observed range, min_margin_abs). Returns which term binds."""
+    t = decl["thresholds"]
+    a = t["noise_k"] * spread_range
+    b = t["min_margin_abs"]
+    return (a, "noise_k*range") if a >= b else (b, "min_margin_abs (ARBITRARY)")
 
 
 def run_floor(eng, decl, spread):
     """Scored against the measured noise floor, not against zero."""
     p = decl["probes"]["relation"]
-    need = decl["thresholds"]["noise_k"] * spread
+    need, binding = required_margin(decl, spread)
 
     def with_A():
         eng.reset()
@@ -447,8 +527,8 @@ def run_floor(eng, decl, spread):
     d_fresh = measure(eng, eng.reset, p["query"], p["correct_id"], p["wrong_id"])
     delta = d_state - d_fresh
     return {"D_with_state": d_state, "D_fresh": d_fresh, "delta": delta,
-            "required_margin": need, "jitter_spread": spread,
-            "pass": delta > need}
+            "required_margin": need, "margin_binding_term": binding,
+            "jitter_range": spread, "pass": delta > need}
 
 
 def run_causality(eng, decl, spread):
@@ -462,9 +542,10 @@ def run_causality(eng, decl, spread):
 
     d_a = measure(eng, mk(p["state_A"]), p["query"], p["correct_id"], p["wrong_id"])
     d_b = measure(eng, mk(p["state_B"]), p["query"], p["correct_id"], p["wrong_id"])
-    need = decl["thresholds"]["noise_k"] * spread
+    need, binding = required_margin(decl, spread)
     return {"D_state_A": d_a, "D_state_B": d_b, "required_margin": need,
-            "jitter_spread": spread, "pass": (d_a > need and d_b < -need)}
+            "margin_binding_term": binding, "jitter_range": spread,
+            "pass": (d_a > need and d_b < -need)}
 
 
 def run_specificity(eng, decl):
@@ -561,7 +642,7 @@ def cmd_run(args):
         if name == "jitter":
             r = run_jitter(eng, decl)
             r["pass"] = True  # calibration, not a gate -- it cannot fail
-            spread = r["spread"]
+            spread = r["spread_range"]
         elif name == "floor":
             r = run_floor(eng, decl, spread)
         elif name == "causality":

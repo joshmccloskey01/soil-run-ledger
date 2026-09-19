@@ -106,3 +106,51 @@ Append-only. Never rewrite an entry. Four parts, all required.
 - If `causality` passes but the same D-shift appears on the unrelated query at
   comparable magnitude, the probe is reading general drift rather than the
   relation, and the specificity gate is what catches it.
+
+## 2026-09-19 (third entry) — apparatus constants hardened before first declaration
+
+**Checked**
+- `run_jitter` as shipped: it returned `spread = max(vals) - min(vals)`, an
+  observed range, while `noise_k = 3.0` was documented as though it were a
+  sigma multiple.
+- The zero-spread case: llama.cpp CPU inference at fixed thread and batch count
+  is expected to be deterministic for an identical state and identical token
+  list, which makes `range == 0.0` a likely rather than exotic outcome.
+- The probe/tokenizer assumption: whether `KOR = ` is a token prefix of
+  `KOR = 7319`, and whether the first token of `7319` is the declared candidate.
+
+**Found**
+- `noise_k × range` is a conservative policy multiple with no statistical
+  interpretation. Recorded as such; `spread_stdev` now also reported so a later
+  declaration can adopt a sigma rule with provenance.
+- A hole in the fix committed one step earlier: with a deterministic runtime,
+  `range == 0.0` makes `required_margin == 0.0`, which reinstates exactly the
+  pass-on-noise failure the noise floor was added to prevent. Added
+  `min_margin_abs = 0.5` logits and `required_margin = max(noise_k*range,
+  min_margin_abs)`, with every result recording which term was binding.
+- `jitter_n = 20` frozen in the declaration.
+- Added a declare-time alignment gate: `declare` refuses to write a declaration
+  unless the query is a genuine token prefix of query+value and the first value
+  token is the declared candidate.
+
+**Failed**
+- My previous entry described the noise-floor fix without noticing that its own
+  threshold degenerates to zero on a deterministic runtime. The fix was
+  incomplete when committed and is superseded here, 2026-09-19. The general
+  pattern is the one Josh's CD Gradient §4.1 names: a constraint discharged at
+  the layer it was written and not against the quantity derived from it. That is
+  now three times in this session.
+- `min_margin_abs = 0.5` is arbitrary. It has no basis beyond being a round
+  number in logit units, and when it binds, the gate rests on it rather than on
+  anything measured.
+- Still nothing executed against a real model. Still no probe-memory attribution
+  as a single pass. Steps 4 and 5 still not built.
+
+**Would kill it**
+- Jitter returning `range == 0.0` AND floor passing only via `min_margin_abs`
+  would mean the first qualification rests entirely on an arbitrary constant, and
+  the apparatus should not be called qualified on that basis. Checked on the
+  first run.
+- The declare-time alignment gate refusing `KOR = 7319` would disqualify the
+  probe before any experiment, and Declaration 2 would need different candidates.
+  Checked on the first run.

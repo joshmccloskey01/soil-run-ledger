@@ -80,9 +80,31 @@ a test, it is the measurement of the runtime's own wobble, and it supplies the
 threshold the gates are scored against. `floor` passes only when the margin
 exceeds `noise_k × jitter_spread`. Scored against a flat zero instead, a margin
 smaller than the runtime's own noise would print PASS, and the battery would
-hand over an instrument that detects nothing. `noise_k` is currently 3.0 — a
-policy constant with no empirical basis, set by Claude, declared with that
-provenance and replaceable by a better-founded value in a new declaration.
+hand over an instrument that detects nothing. ### The declared constants, and what they actually mean
+
+| constant | value | what it is |
+|---|---|---|
+| `jitter_n` | 20 | repetitions. **Frozen before the run** so the noise floor cannot move by choosing how many samples to collect after seeing the values. |
+| `noise_k` | 3.0 | a **conservative policy multiple of the observed range** (`max − min`). Not a 3-sigma threshold; it carries no statistical meaning. `spread_stdev` is recorded alongside so a later declaration can adopt a sigma rule with stated provenance. |
+| `min_margin_abs` | 0.5 logits | arbitrary. Exists because a deterministic runtime gives `range == 0.0`, which would collapse the required margin to zero and reinstate the exact failure the noise floor was added to prevent. |
+| `specificity_min_ratio` | 3.0 | arbitrary, signed off for first qualification. |
+
+`required_margin = max(noise_k × range, min_margin_abs)`. Every result records
+which term was binding. **When `min_margin_abs` binds, the gate is resting on an
+arbitrary number rather than a measured floor**, and the output says so — that is
+weaker evidence and should not be reported as though a noise floor was measured.
+
+### Probe/tokenizer alignment is checked at declare time
+
+`declare` refuses to write a declaration unless, for both probe values:
+
+- `query` is a genuine token prefix of `query + value` (no merge across the boundary), and
+- the first token of `value` is exactly the declared candidate token.
+
+If either fails it prints the real tokenization and stops. This is apparatus
+validation performed before the experiment, not outcome selection: without it the
+discriminator could compare two tokens the model was never going to emit and
+return a clean number anyway.
 
 **If `floor` fails there is no instrument.** That is a recorded result, not a
 tuning prompt. Do not adjust `KOR` until it works — that is choosing the probe
