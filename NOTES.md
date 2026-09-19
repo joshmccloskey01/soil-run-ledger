@@ -337,3 +337,53 @@ Append-only. Never rewrite an entry. Four parts, all required.
 - It returning `None` outside the sandbox too would mean the cause is something
   else entirely on this machine, and the diagnosis restarts.
 - Checked when an unsandboxed shell is available.
+
+## 2026-09-19 (eighth entry) — four overclaims in the previous entry, corrected
+
+The seventh entry stands as written. These are supersessions, dated 2026-09-19,
+not edits to it.
+
+**Checked**
+- Josh's review of the seventh entry against the actual probe results.
+- `probe-venv` is built from Python 3.9.6, which is `/usr/bin/python3` on this
+  machine.
+
+**Found (corrections to the seventh entry)**
+1. "Every process inside that sandbox gets no Metal device" — superseded. Two
+   processes were tested. "Every" was not established and is withdrawn.
+2. "Two different interpreters ... the denial is not binary-specific" —
+   superseded. The venv and `/usr/bin/python3` are the same underlying binary,
+   so that probe ran one binary twice and established nothing about
+   binary-specificity. This is the second correction to the same probe: I first
+   said it tested the interpreter hypothesis, corrected that to "shows the
+   denial is not binary-specific", and that is now also wrong.
+3. "Both remaining routes converge on one dependency: a shell outside the
+   sandbox" — superseded, and this one changed a decision. Network permission
+   had already been granted inside the sandbox for downloads;
+   `CODEX_SANDBOX_NETWORK_DISABLED=1` describes a state that can be changed
+   without leaving the sandbox. A Metal-free rebuild is therefore available
+   in place and does not require Terminal. The two routes are independent.
+4. "Nothing about the model, llama.cpp or the harness is implicated ... that
+   whole line of inquiry is closed" — superseded. Reproducing nil without them
+   shows they were not needed to cause this failure. Their behaviour once Metal
+   is out of the way is untested, not cleared.
+
+**Failed**
+- Every one of these was an overclaim by me, and Josh caught all four. The
+  pattern across them is uniform: I stated a conclusion at a scope the evidence
+  did not reach. That is the same defect as the earlier apparatus failures, in
+  prose rather than in code — a verdict emitted without establishing the
+  category it names.
+- Correction 3 is the costly one. It made a rebuild look blocked on tooling Josh
+  does not have, when it was available the whole time.
+- New risk identified, not yet checked: `ps` returns "operation not permitted"
+  in this sandbox. The restart gate spawns a subprocess and passes state through
+  a file on disk. If either is restricted, that gate fails environmentally and
+  would produce exactly the kind of causeless verdict this session has already
+  produced four times.
+
+**Would kill it**
+- Subprocess spawn or file write failing inside the sandbox would mean the
+  restart gate cannot run there at all, regardless of Metal, and the rebuild
+  would not have unblocked the experiment.
+- Checked on the next run of the capability probe.
