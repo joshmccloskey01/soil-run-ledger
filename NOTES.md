@@ -387,3 +387,62 @@ not edits to it.
   restart gate cannot run there at all, regardless of Metal, and the rebuild
   would not have unblocked the experiment.
 - Checked on the next run of the capability probe.
+
+## 2026-09-19 (ninth entry) — first declaration attempt REFUSED at probe qualification
+
+**Checked**
+- Context-creation diagnosis re-run in Terminal.app, same interpreter
+  (probe-venv, Python 3.9.6, arm64), same llama-cpp-python 0.3.35:
+  Trial 1 (`n_gpu_layers=0`) PASS 6.9s; Trial 2 (frozen settings) PASS 0.4s.
+  Trial 3f not reached because Trial 2 passed.
+- Direct `MTLCreateSystemDefaultDevice()`, same interpreter: `None` inside the
+  Codex seatbelt runner, pointer `4773274624` in Terminal.app.
+- Frozen commit `3e18e8d` `state_probe.py declare` run against the real model
+  with `--ledger "/Users/joshuamccloskey/Downloads/ledger core 2"`.
+
+**Found**
+- The Metal denial is established as specific to the sandboxed runner, by the
+  discriminating comparison that was missing before: identical interpreter,
+  identical versions, device present in one context and absent in the other.
+  No rebuild, no version change, no harness repair was needed for
+  initialization. The earlier n_ctx/n_batch suspicion is fully closed —
+  Trial 2 used exactly the frozen settings and passed in 0.4s.
+- **`declare` REFUSED. No declaration was created.** The probe/tokenizer
+  alignment gate failed on both values:
+    query "KOR = "     -> [1179, 83, 296, 33]
+    "KOR = 7319"       -> [1179, 83, 296, 3546, 639]
+    "KOR = 4412"       -> [1179, 83, 296, 3517, 632]
+  The first three tokens match; the query's trailing space (token 33) is then
+  absorbed, merging with the digits into a single token. The query is therefore
+  not a token prefix of query+value, and the declared candidates (`7`, `4`) are
+  tokens the model was never going to emit at that position.
+- This is the apparatus working. The gate ran before any experiment, refused to
+  write a declaration, and printed the real tokenization. Had it not existed,
+  D would have compared two never-emitted tokens and returned clean numbers for
+  every gate.
+
+**Failed**
+- The probe design is disqualified. `KOR = 7319` / `KOR = 4412` with candidates
+  `7` and `4` cannot serve as the discriminator against this tokenizer. My
+  prediction three entries ago was that `floor` would fail on recall; it failed
+  earlier than that, on tokenization, which I had assumed away.
+- Structural defect in the instrument, relevant to the revision Josh will
+  review: the probe strings and candidates are hardcoded inside
+  `build_declaration()` in `state_probe.py`. Probes are code, not declared
+  input. Any probe revision therefore changes the instrument itself, so
+  `3e18e8d` cannot carry a corrected probe and remain the same object. This
+  was avoidable and is my design error.
+- Still nothing established about RWKV state retention. No gate has run. The
+  instrument has now been through nine entries and produced one refusal and
+  zero measurements.
+
+**Would kill it**
+- A revised probe whose query is a genuine token prefix of query+value, and
+  whose two state values yield distinct first tokens, would clear
+  qualification. Selection among candidate designs must be on tokenization
+  alignment only — never on whether the model answers correctly, which would be
+  outcome selection.
+- If no probe design satisfies alignment with distinct first tokens against this
+  tokenizer, the single-token-margin discriminator is unusable for this model
+  and D needs redefining.
+- Checked when the revised probe is separately reviewed.
