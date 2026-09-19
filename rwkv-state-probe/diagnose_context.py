@@ -80,7 +80,9 @@ def run_child(model, kwargs):
     import llama_cpp
     from llama_cpp import Llama
 
-    sys.stderr.write(f"llama_cpp {llama_cpp.__version__}\n")
+    sys.stderr.write(f"interpreter {sys.executable}\n")
+    sys.stderr.write(f"llama_cpp {llama_cpp.__version__} "
+                     f"({os.path.dirname(llama_cpp.__file__)})\n")
     sys.stderr.write(f"kwargs {json.dumps(kwargs, sort_keys=True)}\n")
     sys.stderr.flush()
 
@@ -138,6 +140,47 @@ def main():
     if a.child:
         sys.exit(run_child(a.model, json.loads(a.kwargs)))
 
+    # ---- preflight: environment provenance, before any trial ----------------
+    import platform
+    env = {
+        "interpreter": sys.executable,
+        "python_version": sys.version.split()[0],
+        "platform": sys.platform,
+        "machine": platform.machine(),          # arm64 vs x86_64 (Rosetta) matters
+        "cpu_count": os.cpu_count(),
+        "frozen_threads": frozen_threads(),
+        "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV", "(none)"),
+        "CONDA_PREFIX": os.environ.get("CONDA_PREFIX", "(none)"),
+    }
+    print("PREFLIGHT")
+    for k, v in env.items():
+        print(f"  {k:16}: {v}")
+
+    try:
+        import llama_cpp
+        env["llama_cpp_version"] = llama_cpp.__version__
+        env["llama_cpp_path"] = os.path.dirname(llama_cpp.__file__)
+        print(f"  {'llama_cpp':16}: {llama_cpp.__version__}")
+    except ImportError as e:
+        print(f"  {'llama_cpp':16}: NOT IMPORTABLE -- {e}")
+        print()
+        print("STOP -- and this is NOT a trial-1 failure. No trial ran, llama.cpp was")
+        print("never reached, and nothing has been established about context creation,")
+        print("this model, or state retention.")
+        print()
+        print("The package is installed under a DIFFERENT interpreter than this one.")
+        print("Find the one that has it, then re-run this script with it explicitly:")
+        print()
+        print("  for p in python3 python3.11 python3.12 python3.13 \\")
+        print("           /usr/bin/python3 /opt/homebrew/bin/python3; do")
+        print("    echo -n \"$p -> \"; $p -c \\")
+        print("      'import llama_cpp,sys;print(sys.executable, llama_cpp.__version__)' \\")
+        print("      2>/dev/null || echo 'no llama_cpp'")
+        print("  done")
+        print()
+        print("  <that interpreter> diagnose_context.py --model <path>")
+        sys.exit(3)
+
     if not os.path.exists(a.model):
         print(f"model not found: {a.model}")
         sys.exit(2)
@@ -147,8 +190,9 @@ def main():
         log.write(f"context diagnosis  {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n")
         log.write(f"model    : {a.model}\n")
         log.write(f"size     : {os.path.getsize(a.model)/1e9:.2f} GB\n")
-        log.write(f"cpu_count: {os.cpu_count()}  frozen_threads: {frozen_threads()}\n")
-        log.write(f"platform : {sys.platform}\n")
+        log.write("environment:\n")
+        for k, v in env.items():
+            log.write(f"  {k}: {v}\n")
 
         # ---- stage 1 -------------------------------------------------------
         ok1, _, _ = run_trial(a.model, "1_cpu_only_defaults",
