@@ -387,26 +387,51 @@ def measure(eng, state_loader, context_text, correct_id, wrong_id):
 
 # ---------------------------------------------------------------- probes
 
-def build_declaration(eng, args):
+def load_probes(path):
+    """
+    Probe strings and candidates are DECLARED INPUT, not code.
+
+    In 3e18e8d they were hardcoded here, so disqualifying a probe forced a
+    change to the instrument itself. The alignment gate refused that probe
+    (trailing space in the query merged with the value's digits) and the
+    instrument could not carry a correction without ceasing to be the same
+    object. Probes now arrive as a reviewed file, hashed into the
+    declaration, so a probe revision never touches measurement code again.
+
+    The file is produced by qualify_probes.py, which loads the model with
+    vocab_only=True and therefore cannot observe model behaviour at all.
+    """
+    raw = Path(path).read_bytes()
+    data = json.loads(raw)
+    for section, keys in (("relation", ("state_A", "state_B", "query",
+                                        "value_A", "value_B",
+                                        "correct_str", "wrong_str")),
+                          ("unrelated", ("query", "value_correct", "value_wrong",
+                                         "correct_str", "wrong_str"))):
+        if section not in data:
+            raise SystemExit(f"probe file missing section {section!r}")
+        for k in keys:
+            if k not in data[section]:
+                raise SystemExit(f"probe file: {section}.{k} missing")
+    # consistency: the state text must actually contain what the gate checks
+    rel = data["relation"]
+    for label, val in (("state_A", rel["value_A"]), ("state_B", rel["value_B"])):
+        if rel["query"] + val not in rel[label]:
+            raise SystemExit(
+                f"probe file: {label} does not contain query+value. The alignment "
+                f"gate would validate a boundary the state never builds."
+            )
+    return data, hashlib.sha256(raw).hexdigest()
+
+
+def build_declaration(eng, args, probe_data, probe_sha):
     """
     Resolve every probe to concrete token ids NOW, freeze them, hash them.
     After this, the harness cannot quietly pick a different comparison.
     """
     probes = {
-        # detection floor + causality share one query, two opposing states
-        "relation": {
-            "state_A": "KOR = 7319\n",
-            "state_B": "KOR = 4412\n",
-            "query": "KOR = ",
-            "correct_str": "7",   # first token of 7319
-            "wrong_str": "4",     # first token of 4412
-        },
-        # specificity: a query the state should NOT be able to answer
-        "unrelated": {
-            "query": "ZIV = ",
-            "correct_str": "8",
-            "wrong_str": "3",
-        },
+        "relation": dict(probe_data["relation"]),
+        "unrelated": dict(probe_data["unrelated"]),
     }
     for name, p in probes.items():
         p["correct_id"] = eng.single_token_id(p["correct_str"])
@@ -418,8 +443,8 @@ def build_declaration(eng, args):
     # it checks that the discriminator compares the tokens it claims to compare.
     align = {}
     rel = probes["relation"]
-    for label, value, cand in (("state_A", "7319", rel["correct_id"]),
-                               ("state_B", "4412", rel["wrong_id"])):
+    for label, value, cand in (("state_A", rel["value_A"], rel["correct_id"]),
+                               ("state_B", rel["value_B"], rel["wrong_id"])):
         ok, detail = eng.verify_alignment(rel["query"], value, cand)
         align[label] = {"pass": ok, **detail}
     if not all(a["pass"] for a in align.values()):
@@ -447,6 +472,9 @@ def build_declaration(eng, args):
             **eng.cfg,
         },
         "probes": probes,
+        "probe_file": os.path.abspath(args.probes),
+        "probe_file_sha256": probe_sha,
+        "probe_set_id": probe_data.get("probe_set_id", "(unnamed)"),
         "probe_alignment": align,
         "thresholds": {
             "jitter_n": 20,
@@ -633,7 +661,8 @@ def cmd_declare(args):
         print("A transformer's saved 'state' is a KV cache of replayed tokens.")
         print("This battery would measure replay, which is the thing it exists to rule out.")
         return 2
-    decl = build_declaration(eng, args)
+    probe_data, probe_sha = load_probes(args.probes)
+    decl = build_declaration(eng, args, probe_data, probe_sha)
     Path(args.decl).write_text(json.dumps(decl, indent=2, sort_keys=True))
 
     led = Ledger(args.ledger)
@@ -641,12 +670,16 @@ def cmd_declare(args):
         "kind": "state_probe_declaration",
         "declaration_sha256": decl["declaration_sha256"],
         "model_sha256": decl["model_sha256"],
+        "probe_file_sha256": decl["probe_file_sha256"],
+        "probe_set_id": decl["probe_set_id"],
         "declared_utc": decl["declared_utc"],
     })
     led.close()
 
     print(f"declaration written: {args.decl}")
     print(f"declaration_sha256:  {decl['declaration_sha256']}")
+    print(f"probe_set_id:        {decl['probe_set_id']}")
+    print(f"probe_file_sha256:   {decl['probe_file_sha256']}")
     print(f"model arch:          {arch} (recurrent={rec})")
     print(f"ledger:              {'committed ' + str(ev) if ev else 'NOT COMMITTED (' + led.reason + ')'}")
     return 0
@@ -802,6 +835,8 @@ def main():
 
     d = sub.add_parser("declare", help="freeze probes+thresholds into the ledger BEFORE running")
     common(d)
+    d.add_argument("--probes", required=True,
+                   help="reviewed probe file from qualify_probes.py")
     d.add_argument("--n-ctx", type=int, default=512)
     d.add_argument("--threads", type=int, default=None)
     d.add_argument("--n-batch", type=int, default=512)

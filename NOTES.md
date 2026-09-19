@@ -446,3 +446,51 @@ not edits to it.
   tokenizer, the single-token-margin discriminator is unusable for this model
   and D needs redefining.
 - Checked when the revised probe is separately reviewed.
+
+## 2026-09-19 (tenth entry) — probes moved to declared input (revision for review)
+
+**Checked**
+- `git diff 3e18e8d HEAD -- state_probe.py` before starting: the only drift was
+  Engine construction verbosity and the `doctor` subcommand. No measurement,
+  threshold, gate or alignment line differed. Confirmed again after the change.
+- `load_probes` against three files: valid, internally inconsistent (state_A not
+  containing query+value), and missing keys. Refused the latter two.
+- `declare --help`: `--probes` is now required.
+
+**Found**
+- Probe strings and candidate tokens are now a reviewed file hashed into the
+  declaration (`probe_file_sha256`, `probe_set_id`), not code. A probe revision
+  no longer touches measurement.
+- The alignment gate is unchanged in logic; it now reads `value_A`/`value_B`
+  from the file instead of the literals `"7319"`/`"4412"`. Candidates remain
+  explicit in the file rather than derived, so the gate's second condition
+  still checks something: a hand-edited file is caught.
+- Added `load_probes` consistency check not present in `3e18e8d`: the state text
+  must contain `query + value`, otherwise the gate would validate a boundary the
+  state never builds.
+- `qualify_probes.py` loads with `vocab_only=True`. No context is created and no
+  logit can be read, so selecting a probe by model performance is unavailable
+  rather than merely prohibited. It checks prefix, first-token presence,
+  detokenize/retokenize round trip, and candidate distinctness.
+
+**Failed**
+- Nothing here is verified against the model. `qualify_probes.py` has never run
+  against real weights; I still cannot run any of it. Whether design B
+  (trailing space moved into the value) actually clears alignment is unknown —
+  it is a candidate to validate, exactly as Josh stated, and I have not
+  validated it.
+- The round-trip check is new and untested. If `detokenize(first_token)` does
+  not re-tokenize to a single token for leading-space tokens in this
+  tokenizer, designs will fail qualification for a reason that is about my
+  check rather than about the probe. I do not know which way that goes.
+- `3e18e8d` remains the instrument of record for the refusal. This revision has
+  produced no declaration and no measurement.
+
+**Would kill it**
+- No candidate design passing alignment would mean the single-token-margin
+  discriminator is unusable against this tokenizer and D needs redefining.
+  `qualify_probes.py` prints that conclusion rather than inviting more designs.
+- Design A (the disqualified one) passing under the new tool would mean the
+  tools disagree, and the new one would be wrong until reconciled. It is
+  retained in the design list for exactly that reason.
+- Checked when Josh runs qualification.
