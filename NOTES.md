@@ -547,3 +547,52 @@ not edits to it.
 - The extended alignment gate rejecting a probe file that the qualifier emitted
   would mean the two tools disagree about alignment, and the declaration path
   would be wrong until reconciled.
+
+## 2026-09-19 (twelfth entry) — tokenizer qualification results; known limitation logged pre-declaration
+
+**Checked**
+- `qualify_probes.py` at `bf6d017` run against the real model
+  (sha256 f5a04a0a...31d8) on Josh's Mac, model-only load path.
+- Six candidate designs, four query/value pairs each.
+
+**Found**
+- The reconciliation check passed. Design A fails on all four pairs and
+  reproduces the original refusal's token arrays exactly
+  (`[1179, 83, 296, 33]` vs `[1179, 83, 296, 3546, 639]`). The new tool agrees
+  with the frozen gate on the one case whose answer was already known. This was
+  the stated kill condition for the qualifier; it survived.
+- The model-only load path works in execution, not just by signature
+  inspection. `_internals.LlamaModel` is verified.
+- Designs B, C, D, E, F pass alignment and round-trip. A fails.
+- B is the only passing design whose state text is byte-identical to the frozen
+  design: `query + value_A + "\n"` gives `"KOR = 7319\n"` for B, versus
+  `"KOR: 7319\n"` (C), `"KOR=7319\n"` (D), `"KOR =\n7319\n"` (E),
+  `"KOR = seven\n"` (F). B moves only the query boundary used at measurement
+  time. Its candidates 3546/3517 are the same tokens that appeared at position
+  3 in the original refusal.
+
+**Failed / known limitation, logged before any declaration exists**
+- Specificity confound in B, and in C, D and E: the unrelated probe runs with
+  `state_A` loaded, and `state_A` contains the character `3` (inside `7319`)
+  while containing no `8`. The unrelated candidates are `' 3'` and `' 8'`, so
+  the two are not symmetric with respect to the state's content.
+  Measured qualification: tokens 286 (`' 3'`) and 291 (`' 8'`) do NOT appear in
+  `state_A`'s token sequence `[1179, 83, 296, 3546, 639, ...]`. The overlap is
+  therefore character-level inside a merged token, not a token collision. This
+  is weaker than I first stated it, and the correction is in my favour, which is
+  a reason to be more careful about it rather than less.
+  **Consequence to honour if it fires:** a specificity failure under this probe
+  set is consistent with content overlap and cannot by itself be read as the
+  state being non-specific. Digits absent from both values are 0, 5, 6, 8, so
+  `' 8'`/`' 5'` would remove the asymmetry in a later probe set.
+- Nothing here tests whether the model will emit these tokens. Qualification
+  establishes the discriminator compares emittable tokens, nothing more.
+- No probe emitted, no declaration, no gate run.
+
+**Would kill it**
+- The specificity gate failing while floor and causality pass would make this
+  logged confound the first thing to check, and a probe set with `' 8'`/`' 5'`
+  the discriminating follow-up.
+- The alignment gate in `state_probe.py` rejecting the probe file that
+  `qualify_probes.py` emits would mean the two tools disagree despite agreeing
+  on design A, and the declaration path is wrong until reconciled.
