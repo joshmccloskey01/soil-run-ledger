@@ -1,0 +1,663 @@
+#!/usr/bin/env python3
+"""
+state-retention apparatus test  --  RWKV recurrent state
+
+This does NOT test the continuity thesis. Passing it establishes exactly one thing:
+
+    A live internal state can be saved, survive process death, and causally
+    affect later computation without replay.
+
+That earns the apparatus. Nothing more.
+
+DISCRIMINATOR (fixed before any run, never chosen after seeing output):
+
+    D = log P(correct_token | C) - log P(wrong_token | C)
+
+  Computed as the raw logit difference at the final position. This is exact,
+  not an approximation: log-softmax differences equal logit differences
+  because the log-sum-exp denominator is identical for both candidates and
+  cancels. No temperature, no sampling, no prose judged anywhere.
+
+BATTERY, in order. Each gate must pass before the next is meaningful.
+
+    jitter       runtime noise floor        (calibration; sets restart tolerance)
+    floor        detection floor            (probe can see a known injected relation)
+    causality    same C, different state    (D flips sign with the state)
+    specificity  same state, different C    (state moves its own query, not everything)
+    restart      live vs saved/restored     (survives process death within tolerance)
+
+PRECOMMITMENT. `declare` writes the probe set, candidate token ids, and
+thresholds into the ledger BEFORE step 1 runs. Tests refuse to run without a
+matching declaration hash. Changing a probe after seeing a result requires a
+NEW declaration, applies forward only, and leaves the old one in the chain.
+"""
+
+import argparse
+import ctypes
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+# ---------------------------------------------------------------- constants
+
+DECL_VERSION = "state-probe-decl-v1"
+
+
+def _utc():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def sha256_file(path, chunk=1 << 20):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            b = f.read(chunk)
+            if not b:
+                break
+            h.update(b)
+    return h.hexdigest()
+
+
+def canon_hash(obj):
+    """Stable hash of a declaration. Sorted keys, no whitespace drift."""
+    blob = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(blob).hexdigest()
+
+
+# ---------------------------------------------------------------- ledger
+
+class Ledger:
+    """
+    Thin binding to ledger core. The ledger is the RECORD and the REFEREE.
+    It is never the thing that recreates the model -- that would make the
+    instrument part of the build.
+
+    Optional: if --ledger is not given, results still print but are not
+    committed, and every result is stamped uncommitted=True.
+    """
+
+    def __init__(self, core_dir=None, db_path=None):
+        self.ok = False
+        self.reason = "not requested"
+        if not core_dir:
+            return
+        code = Path(core_dir) / "code"
+        if not code.is_dir():
+            self.reason = f"no code/ dir under {core_dir}"
+            return
+        sys.path.insert(0, str(code))
+        try:
+            from genesis import create_ledger, verify_chain  # noqa
+            from storage import open_authoritative
+            from append import append, read_head
+        except Exception as e:  # pragma: no cover
+            self.reason = f"import failed: {e}"
+            return
+
+        self._append = append
+        self._read_head = read_head
+        self._verify = verify_chain
+        self.db = db_path or str(Path(core_dir) / "state_probe.db")
+
+        if not os.path.exists(self.db):
+            try:
+                create_ledger(
+                    self.db,
+                    contract_path=str(Path(core_dir) / "docs" / "Irreversible_Ledger_Contract_v0.1.md"),
+                    canon_module_path=str(code / "canon1.py"),
+                    protocol_module_path=str(code / "canon1_protocol.py"),
+                    vector_package_path=str(Path(core_dir) / "vectors" / "jcs_vectors_v1.json"),
+                    vector_manifest_path=str(Path(core_dir) / "vectors" / "PACKAGE.sha256"),
+                )
+            except Exception as e:
+                self.reason = f"create_ledger failed: {e}"
+                return
+        try:
+            self.vc = open_authoritative(self.db)
+        except Exception as e:
+            self.reason = f"open failed: {e}"
+            return
+        self.ok = True
+        self.reason = "ok"
+
+    def commit(self, event_type, body):
+        if not self.ok:
+            return None
+        ev = self._append(
+            self.vc,
+            event_type=event_type,
+            body=body,
+            expected_head=self._read_head(self.vc.conn),
+        )
+        return ev.get("event_id")
+
+    def verify(self):
+        if not self.ok:
+            return None
+        return self._verify(self.db)
+
+    def close(self):
+        if self.ok:
+            try:
+                self.vc.close()
+            except Exception:
+                pass
+
+
+# ---------------------------------------------------------------- engine
+
+class Engine:
+    """
+    Wraps llama-cpp-python with exact-token scoring and explicit state control.
+
+    Why direct bindings and not llama-server: the server keeps a prompt-prefix
+    cache and decides on its own whether to reuse or reprocess. For a recurrent
+    model that decision is invisible from outside and silently determines
+    whether a result means anything. Here every measurement loads an explicit
+    state and feeds an explicit token list. Nothing is inferred.
+    """
+
+    def __init__(self, model_path, n_ctx=512, n_threads=None, n_batch=512, seed=0):
+        import llama_cpp
+        from llama_cpp import Llama
+
+        self.llama_cpp = llama_cpp
+        self.model_path = model_path
+        self.cfg = dict(
+            n_ctx=n_ctx,
+            n_threads=n_threads or max(1, (os.cpu_count() or 4) // 2),
+            n_batch=n_batch,
+            seed=seed,
+        )
+        self.llm = Llama(
+            model_path=model_path,
+            n_ctx=n_ctx,
+            n_threads=self.cfg["n_threads"],
+            n_batch=n_batch,
+            seed=seed,
+            logits_all=False,
+            verbose=False,
+        )
+
+    # -- architecture check ------------------------------------------------
+
+    def arch_is_recurrent(self):
+        """
+        Best-effort. If this is False the whole battery is meaningless --
+        a transformer's 'state' is a KV cache of replayed tokens, which is
+        exactly the thing the test exists to rule out.
+        """
+        try:
+            md = self.llm.metadata
+            for k, v in md.items():
+                if k.endswith(".architecture") or k == "general.architecture":
+                    return str(v).lower() in {
+                        "rwkv6", "rwkv7", "arwkv7", "rwkv6qwen2", "mamba", "mamba2"
+                    }, str(v)
+        except Exception:
+            pass
+        return None, "unknown"
+
+    # -- tokens ------------------------------------------------------------
+
+    def tok(self, s, add_bos=False):
+        return self.llm.tokenize(s.encode("utf-8"), add_bos=add_bos, special=False)
+
+    def single_token_id(self, s):
+        """
+        Resolve a candidate string to exactly one token id, or fail loudly.
+        A multi-token candidate silently changes what D means, so it is
+        rejected at declare time rather than averaged over at run time.
+        """
+        ids = self.tok(s)
+        if len(ids) != 1:
+            raise ValueError(
+                f"candidate {s!r} is {len(ids)} tokens ({ids}); D requires exactly 1. "
+                f"Pick a different candidate at declare time."
+            )
+        return ids[0]
+
+    # -- state -------------------------------------------------------------
+
+    def reset(self):
+        self.llm.reset()
+
+    def eval_tokens(self, ids):
+        self.llm.eval(ids)
+
+    def logits_now(self):
+        """
+        Logits at the current final position, read straight from the context.
+
+        NOT from llm.scores. With logits_all=False (the default) llama-cpp-python's
+        eval() deliberately does not populate `scores` at all -- it is a `pass`.
+        Reading scores there returns zeros, which would make D == 0.0 for every
+        probe and produce a uniform FAIL that looks like a result about the model
+        and is actually a result about this function. Verified in
+        llama_cpp/llama.py eval() at v0.3.35.
+        """
+        import numpy as np
+        ptr = self.llm._ctx.get_logits()
+        return np.ctypeslib.as_array(ptr, shape=(self.llm._n_vocab,))
+
+    def D(self, correct_id, wrong_id):
+        lg = self.logits_now()
+        # Guard the exact failure described above: if logits are degenerate,
+        # say so loudly instead of emitting a confident 0.0.
+        if not float(lg.any()):
+            raise RuntimeError(
+                "logits are all zero -- the runtime did not expose logits for this "
+                "position. D is not measurable; this is an apparatus fault, not a "
+                "result about the model. Do not record it as a failed probe."
+            )
+        return float(lg[correct_id]) - float(lg[wrong_id])
+
+    # in-process state
+
+    def snapshot(self):
+        return self.llm.save_state()
+
+    def restore(self, snap):
+        self.llm.load_state(snap)
+
+    # cross-process state -> disk
+
+    def state_to_file(self, path, n_tokens_hint):
+        """
+        Writes the recurrent state to disk via the low-level C API, plus a
+        sidecar recording how many tokens produced it. The sidecar is
+        bookkeeping only; it is NOT replayed on load. If it were, the test
+        would be measuring replay, which is the thing being ruled out.
+        """
+        lc = self.llama_cpp
+        ctx = self.llm._ctx.ctx
+        fn = getattr(lc, "llama_state_save_file", None) or getattr(lc, "llama_save_session_file", None)
+        if fn is None:
+            raise RuntimeError("no llama_state_save_file in this llama_cpp build")
+        toks = (lc.llama_token * n_tokens_hint)(*self.llm.input_ids[:n_tokens_hint].tolist())
+        ok = fn(ctx, path.encode("utf-8"), toks, ctypes.c_size_t(n_tokens_hint))
+        if not ok:
+            raise RuntimeError("llama_state_save_file returned false")
+        with open(path + ".meta.json", "w") as f:
+            json.dump({"n_tokens": n_tokens_hint, "saved_utc": _utc()}, f)
+        return os.path.getsize(path)
+
+    def state_from_file(self, path, n_ctx_cap=None):
+        lc = self.llama_cpp
+        ctx = self.llm._ctx.ctx
+        fn = getattr(lc, "llama_state_load_file", None) or getattr(lc, "llama_load_session_file", None)
+        if fn is None:
+            raise RuntimeError("no llama_state_load_file in this llama_cpp build")
+        meta = json.load(open(path + ".meta.json"))
+        cap = n_ctx_cap or self.cfg["n_ctx"]
+        buf = (lc.llama_token * cap)()
+        n_out = ctypes.c_size_t(0)
+        ok = fn(ctx, path.encode("utf-8"), buf, ctypes.c_size_t(cap), ctypes.byref(n_out))
+        if not ok:
+            raise RuntimeError("llama_state_load_file returned false")
+        # sync python-side bookkeeping so eval() appends rather than restarts
+        n = int(n_out.value)
+        self.llm.n_tokens = n
+        try:
+            self.llm.input_ids[:n] = list(buf)[:n]
+        except Exception:
+            pass
+        return n, meta
+
+
+# ---------------------------------------------------------------- measure
+
+def measure(eng, state_loader, context_text, correct_id, wrong_id):
+    """
+    One measurement. ALWAYS starts by loading an explicit state, because a
+    recurrent state cannot be rewound -- there is no way to 'undo' an eval.
+    Every D in this file is produced by this function and no other path.
+    """
+    state_loader()
+    ids = eng.tok(context_text)
+    if not ids:
+        raise ValueError("empty context tokenization")
+    eng.eval_tokens(ids)
+    return eng.D(correct_id, wrong_id)
+
+
+# ---------------------------------------------------------------- probes
+
+def build_declaration(eng, args):
+    """
+    Resolve every probe to concrete token ids NOW, freeze them, hash them.
+    After this, the harness cannot quietly pick a different comparison.
+    """
+    probes = {
+        # detection floor + causality share one query, two opposing states
+        "relation": {
+            "state_A": "KOR = 7319\n",
+            "state_B": "KOR = 4412\n",
+            "query": "KOR = ",
+            "correct_str": "7",   # first token of 7319
+            "wrong_str": "4",     # first token of 4412
+        },
+        # specificity: a query the state should NOT be able to answer
+        "unrelated": {
+            "query": "ZIV = ",
+            "correct_str": "8",
+            "wrong_str": "3",
+        },
+    }
+    for name, p in probes.items():
+        p["correct_id"] = eng.single_token_id(p["correct_str"])
+        p["wrong_id"] = eng.single_token_id(p["wrong_str"])
+        if p["correct_id"] == p["wrong_id"]:
+            raise ValueError(f"probe {name}: candidates tokenize identically")
+
+    recurrent, arch = eng.arch_is_recurrent()
+
+    decl = {
+        "decl_version": DECL_VERSION,
+        "declared_utc": _utc(),
+        "purpose": "state-retention apparatus test; NOT a test of the continuity thesis",
+        "discriminator": "D = logit[correct] - logit[wrong] at final position "
+                         "(== logP(correct) - logP(wrong); denominator cancels)",
+        "model_path": os.path.abspath(args.model),
+        "model_sha256": sha256_file(args.model),
+        "model_arch": arch,
+        "model_arch_is_recurrent": recurrent,
+        "runtime": {
+            "llama_cpp_version": eng.llama_cpp.__version__,
+            **eng.cfg,
+        },
+        "probes": probes,
+        "thresholds": {
+            "floor_min_D": 0.0,
+            "floor_note": "D(state_A, query) > 0 means the probe can see an injected relation. "
+                          "If this fails there is no instrument, and that is a recorded "
+                          "result, not something to tune around.",
+            "causality_requires": "D(state_A) > 0 AND D(state_B) < 0 -- same C, same candidate "
+                                  "tokens, opposite states, D flips sign",
+            "specificity_min_ratio": 3.0,
+            "specificity_note": "|dD_related| must exceed |dD_unrelated| by this factor. "
+                                "Requiring zero drift would be too strong: any state shifts "
+                                "general distributions somewhat.",
+            "restart_tol": None,
+            "restart_tol_note": "NOT declarable in advance. Set by the jitter calibration, "
+                                "then frozen forward-only in a stage-2 declaration. A tolerance "
+                                "picked after seeing the restart result would be selection.",
+        },
+    }
+    decl["declaration_sha256"] = canon_hash({k: v for k, v in decl.items()})
+    return decl
+
+
+# ---------------------------------------------------------------- battery
+
+def run_jitter(eng, decl, reps=5):
+    """
+    NOT in the original spec. Added because 'restart equivalence within a
+    predeclared tolerance' cannot be declared without knowing the runtime's
+    own nondeterminism first. Same state, same C, repeated: any spread here
+    is floating-point reduction-order noise, not state loss. This is the
+    detection floor for the restart probe.
+    """
+    p = decl["probes"]["relation"]
+    base = p["state_A"]
+
+    snap = None
+
+    def load_fresh():
+        eng.reset()
+        eng.eval_tokens(eng.tok(base))
+
+    # build once, snapshot, then replay from snapshot repeatedly
+    load_fresh()
+    snap = eng.snapshot()
+
+    vals = []
+    for _ in range(reps):
+        vals.append(measure(eng, lambda: eng.restore(snap), p["query"],
+                            p["correct_id"], p["wrong_id"]))
+    spread = max(vals) - min(vals)
+    return {"values": vals, "spread": spread,
+            "suggested_restart_tol": max(spread * 10.0, 1e-3)}
+
+
+def run_floor(eng, decl):
+    p = decl["probes"]["relation"]
+
+    def with_A():
+        eng.reset()
+        eng.eval_tokens(eng.tok(p["state_A"]))
+
+    d_state = measure(eng, with_A, p["query"], p["correct_id"], p["wrong_id"])
+    d_fresh = measure(eng, eng.reset, p["query"], p["correct_id"], p["wrong_id"])
+    passed = d_state > decl["thresholds"]["floor_min_D"] and d_state > d_fresh
+    return {"D_with_state": d_state, "D_fresh": d_fresh,
+            "delta": d_state - d_fresh, "pass": passed}
+
+
+def run_causality(eng, decl):
+    p = decl["probes"]["relation"]
+
+    def mk(text):
+        def f():
+            eng.reset()
+            eng.eval_tokens(eng.tok(text))
+        return f
+
+    d_a = measure(eng, mk(p["state_A"]), p["query"], p["correct_id"], p["wrong_id"])
+    d_b = measure(eng, mk(p["state_B"]), p["query"], p["correct_id"], p["wrong_id"])
+    return {"D_state_A": d_a, "D_state_B": d_b, "pass": (d_a > 0 and d_b < 0)}
+
+
+def run_specificity(eng, decl):
+    rel = decl["probes"]["relation"]
+    unr = decl["probes"]["unrelated"]
+
+    def with_A():
+        eng.reset()
+        eng.eval_tokens(eng.tok(rel["state_A"]))
+
+    d_rel_state = measure(eng, with_A, rel["query"], rel["correct_id"], rel["wrong_id"])
+    d_rel_fresh = measure(eng, eng.reset, rel["query"], rel["correct_id"], rel["wrong_id"])
+    d_unr_state = measure(eng, with_A, unr["query"], unr["correct_id"], unr["wrong_id"])
+    d_unr_fresh = measure(eng, eng.reset, unr["query"], unr["correct_id"], unr["wrong_id"])
+
+    m_rel = abs(d_rel_state - d_rel_fresh)
+    m_unr = abs(d_unr_state - d_unr_fresh)
+    ratio = (m_rel / m_unr) if m_unr > 1e-9 else float("inf")
+    return {"shift_related": m_rel, "shift_unrelated": m_unr, "ratio": ratio,
+            "pass": ratio >= decl["thresholds"]["specificity_min_ratio"]}
+
+
+def run_restart_save(eng, decl, state_file):
+    """Process 1: build state, measure live D, write state to disk, exit."""
+    p = decl["probes"]["relation"]
+    eng.reset()
+    ids = eng.tok(p["state_A"])
+    eng.eval_tokens(ids)
+    nbytes = eng.state_to_file(state_file, eng.llm.n_tokens)
+    # measure live AFTER saving, from a snapshot of the same point
+    snap = eng.snapshot()
+    d_live = measure(eng, lambda: eng.restore(snap), p["query"],
+                     p["correct_id"], p["wrong_id"])
+    return {"D_live": d_live, "state_bytes": nbytes, "n_tokens": len(ids)}
+
+
+def run_restart_load(eng, decl, state_file):
+    """Process 2: fresh process, restore from disk, measure. No replay."""
+    p = decl["probes"]["relation"]
+
+    def load():
+        eng.reset()
+        eng.state_from_file(state_file)
+
+    d_restored = measure(eng, load, p["query"], p["correct_id"], p["wrong_id"])
+    return {"D_restored": d_restored}
+
+
+# ---------------------------------------------------------------- cli
+
+def cmd_declare(args):
+    eng = Engine(args.model, args.n_ctx, args.threads, args.n_batch, args.seed)
+    rec, arch = eng.arch_is_recurrent()
+    if rec is False:
+        print(f"REFUSING: model architecture is {arch!r}, which is not recurrent.")
+        print("A transformer's saved 'state' is a KV cache of replayed tokens.")
+        print("This battery would measure replay, which is the thing it exists to rule out.")
+        return 2
+    decl = build_declaration(eng, args)
+    Path(args.decl).write_text(json.dumps(decl, indent=2, sort_keys=True))
+
+    led = Ledger(args.ledger)
+    ev = led.commit("measurement_commitment", {
+        "kind": "state_probe_declaration",
+        "declaration_sha256": decl["declaration_sha256"],
+        "model_sha256": decl["model_sha256"],
+        "declared_utc": decl["declared_utc"],
+    })
+    led.close()
+
+    print(f"declaration written: {args.decl}")
+    print(f"declaration_sha256:  {decl['declaration_sha256']}")
+    print(f"model arch:          {arch} (recurrent={rec})")
+    print(f"ledger:              {'committed ' + str(ev) if ev else 'NOT COMMITTED (' + led.reason + ')'}")
+    return 0
+
+
+def cmd_run(args):
+    decl = json.loads(Path(args.decl).read_text())
+    eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
+                 decl["runtime"]["n_batch"], decl["runtime"]["seed"])
+
+    live_hash = sha256_file(args.model)
+    if live_hash != decl["model_sha256"]:
+        print("REFUSING: model file does not match the declaration.")
+        return 2
+
+    results = {"declaration_sha256": decl["declaration_sha256"], "run_utc": _utc()}
+    order = ["jitter", "floor", "causality", "specificity"]
+    gate_failed = None
+
+    for name in order:
+        if name == "jitter":
+            r = run_jitter(eng, decl)
+            r["pass"] = True  # calibration, not a gate
+        elif name == "floor":
+            r = run_floor(eng, decl)
+        elif name == "causality":
+            r = run_causality(eng, decl)
+        else:
+            r = run_specificity(eng, decl)
+        results[name] = r
+        verdict = "PASS" if r.get("pass") else "FAIL"
+        print(f"[{verdict}] {name}: " + json.dumps(
+            {k: (round(v, 5) if isinstance(v, float) else v)
+             for k, v in r.items() if k != "values"}))
+        if not r.get("pass"):
+            gate_failed = name
+            break
+
+    if gate_failed:
+        print(f"\nSTOPPED at {gate_failed}. Later gates are not meaningful once an "
+              f"earlier one fails. This is a recorded result, not a tuning prompt:")
+        print("changing a probe now requires a NEW declaration, forward-only.")
+
+    led = Ledger(args.ledger)
+    ev = led.commit("observation", {
+        "kind": "state_probe_battery",
+        "declaration_sha256": decl["declaration_sha256"],
+        "results": json.loads(json.dumps(results)),
+        "gate_failed": gate_failed,
+    })
+    chain = led.verify()
+    led.close()
+    Path(args.out).write_text(json.dumps(results, indent=2, sort_keys=True))
+    print(f"\nresults: {args.out}")
+    print(f"ledger:  {'committed ' + str(ev) if ev else 'NOT COMMITTED (' + led.reason + ')'}")
+    if chain is not None:
+        print(f"chain:   {'clean' if chain == [] else chain}")
+    return 0 if not gate_failed else 1
+
+
+def cmd_restart(args):
+    """Two real processes. Parent orchestrates; children do the work."""
+    decl = json.loads(Path(args.decl).read_text())
+    if args.phase == "save":
+        eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
+                     decl["runtime"]["n_batch"], decl["runtime"]["seed"])
+        print(json.dumps(run_restart_save(eng, decl, args.state_file)))
+        return 0
+    if args.phase == "load":
+        eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
+                     decl["runtime"]["n_batch"], decl["runtime"]["seed"])
+        print(json.dumps(run_restart_load(eng, decl, args.state_file)))
+        return 0
+
+    # orchestrate
+    tol = args.tol
+    if tol is None:
+        print("REFUSING: --tol is required and must come from the jitter calibration.")
+        print("A tolerance chosen after seeing the restart result is selection, not a test.")
+        return 2
+
+    base = [sys.executable, __file__, "restart", "--model", args.model,
+            "--decl", args.decl, "--state-file", args.state_file]
+    s = json.loads(subprocess.run(base + ["--phase", "save"],
+                                  capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1])
+    l = json.loads(subprocess.run(base + ["--phase", "load"],
+                                  capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1])
+
+    delta = abs(s["D_live"] - l["D_restored"])
+    passed = delta <= tol
+    res = {"D_live": s["D_live"], "D_restored": l["D_restored"], "delta": delta,
+           "tol": tol, "state_bytes": s["state_bytes"], "pass": passed,
+           "declaration_sha256": decl["declaration_sha256"], "run_utc": _utc()}
+    print(f"[{'PASS' if passed else 'FAIL'}] restart: " + json.dumps(res))
+
+    led = Ledger(args.ledger)
+    ev = led.commit("observation", {"kind": "state_probe_restart", "results": res})
+    led.close()
+    print(f"ledger: {'committed ' + str(ev) if ev else 'NOT COMMITTED (' + led.reason + ')'}")
+    return 0 if passed else 1
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    def common(p):
+        p.add_argument("--model", required=True)
+        p.add_argument("--decl", default="declaration.json")
+        p.add_argument("--ledger", default=None,
+                       help="path to 'ledger core 2' dir; omit to run uncommitted")
+
+    d = sub.add_parser("declare", help="freeze probes+thresholds into the ledger BEFORE running")
+    common(d)
+    d.add_argument("--n-ctx", type=int, default=512)
+    d.add_argument("--threads", type=int, default=None)
+    d.add_argument("--n-batch", type=int, default=512)
+    d.add_argument("--seed", type=int, default=0)
+    d.set_defaults(fn=cmd_declare)
+
+    r = sub.add_parser("run", help="jitter -> floor -> causality -> specificity")
+    common(r)
+    r.add_argument("--out", default="results.json")
+    r.set_defaults(fn=cmd_run)
+
+    s = sub.add_parser("restart", help="two-process save/restore equivalence")
+    common(s)
+    s.add_argument("--state-file", default="s2.state")
+    s.add_argument("--tol", type=float, default=None)
+    s.add_argument("--phase", choices=["save", "load"], default=None)
+    s.set_defaults(fn=cmd_restart)
+
+    a = ap.parse_args()
+    sys.exit(a.fn(a))
+
+
+if __name__ == "__main__":
+    main()

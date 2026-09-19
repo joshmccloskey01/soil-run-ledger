@@ -41,3 +41,68 @@ Append-only. Never rewrite an entry. Four parts, all required.
   Checked the next time Josh runs it and reports the terminal output.
 
 ---
+
+## 2026-09-19 (second entry) — RWKV state apparatus: verification + harness
+
+**Checked**
+- llama.cpp source at commit `e613ef2` (cloned, dated 2026-09-19):
+  `llm_arch_is_recurrent()` in `src/llama-arch.cpp` lists `LLM_ARCH_RWKV7`;
+  `src/llama-memory-recurrent.cpp::state_write_data` writes per-layer `r_l`,
+  `s_l`, and PLE conv `p_l` tensors; `llama_state_seq_save_file` /
+  `llama_state_seq_load_file` exported in `include/llama.h`; server route
+  `POST /slots/:id_slot` with `--slot-save-path` in `tools/server/server.cpp:288`.
+- llama-cpp-python 0.3.35 installed here; inspected `Llama.__init__` kwargs,
+  `eval()`, `save_state()`, `load_state()`, and the ctypes signatures of
+  `llama_state_save_file` / `llama_state_load_file`.
+- Ledger core zip: README, `Llm/demo.py`, Regime Identity Contract v0.1,
+  Reading Check Loop v0.1.
+
+**Found**
+- The state interface exists one layer below Ollama. RWKV7 routes to recurrent
+  memory, and that memory serializes the actual state tensors to disk; restore
+  sets state directly rather than replaying tokens. This supports steps 1–3 of
+  the apparatus sequence. Read from source only.
+- A real bug in my own first draft, caught before it could produce a fake result:
+  with `logits_all=False` (the default), llama-cpp-python's `eval()` does not
+  populate `llm.scores` — the branch is a literal `pass`. Reading scores there
+  returns zeros, making D = 0.0 for every probe. That would have rendered a
+  uniform FAIL that looked like a finding about the model and was a finding about
+  my function. Fixed to read `_ctx.get_logits()`, plus a loud guard that raises
+  on all-zero logits instead of emitting a confident 0.0.
+- Two further attribute errors in the draft: `_input_ids` is `input_ids` in
+  0.3.35, and `Llama.metadata` is an instance attribute, not a class one.
+- Built `rwkv-state-probe/state_probe.py`: declare / run / restart, with the
+  precommitment hash committed to the ledger before any number is produced,
+  and `restart` refusing to run without a tolerance derived from the jitter
+  calibration.
+
+**Failed**
+- **Nothing was executed against a real model.** HuggingFace is blocked by this
+  container's egress policy, so no RWKV weights were reachable. The harness is
+  syntax-checked and API-verified, never run. Its first run on the Mac is also
+  its first test, and the most likely outcome of a first run is that it breaks.
+- The llama.cpp slot save/restore test in-repo (`tools/server/tests/unit/
+  test_slot_save.py`) uses tinyllama2, a transformer. I found no RWKV-specific
+  state save/restore test. The recurrent path is implemented; I cannot show it
+  is exercised in CI.
+- Earlier in this session I recommended a ledger catch-up loader as the default
+  build and filed state persistence as the unverified alternative. For the test
+  actually being run that ranking was backwards, and the corpus rule that should
+  have caught it is Josh's own: an instrument that is also part of the build is
+  contaminated. Superseded by the apparatus-test framing, 2026-09-19.
+- Probe-memory attribution is specified but not implemented as a single pass.
+  A restored-vs-fresh divergence cannot yet be attributed to the state rather
+  than the runtime's prefix handling.
+- Steps 4 (return corrects state) and 5 (continuity vs. no continuity) are not
+  built and are not claimed.
+
+**Would kill it**
+- `floor` failing — the probe cannot see `KOR = 7319` injected into state — kills
+  the claim that this instrument can detect retained state at all, and no amount
+  of changing the probe string afterward repairs it; that would be selection.
+  Checked on Josh's first run.
+- `restart` diverging beyond the jitter-derived tolerance kills the claim that
+  state survives process death. Checked on the same run.
+- If `causality` passes but the same D-shift appears on the unrelated query at
+  comparable magnitude, the probe is reading general drift rather than the
+  relation, and the specificity gate is what catches it.
