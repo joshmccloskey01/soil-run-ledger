@@ -596,3 +596,49 @@ not edits to it.
 - The alignment gate in `state_probe.py` rejecting the probe file that
   `qualify_probes.py` emits would mean the two tools disagree despite agreeing
   on design A, and the declaration path is wrong until reconciled.
+
+## 2026-09-19 (thirteenth entry) — qualifier/gate disagreement risk closed by construction
+
+**Checked**
+- `llama_cpp/llama.py:618`: `Llama.tokenize` returns
+  `self.tokenizer_.tokenize(text, add_bos, special)`.
+- `llama.py:397`: `self.tokenizer_ = tokenizer or LlamaTokenizer(self)`.
+- `llama_tokenizer.py`: `LlamaTokenizer.__init__` sets
+  `self._model = llama._model`; its `tokenize`/`detokenize` delegate straight
+  to `self._model.tokenize` / `self._model.detokenize`.
+- `llama._model` is an `internals.LlamaModel` — the same class
+  `qualify_probes.py` loads directly.
+
+**Found**
+- The stated kill condition "the alignment gate rejects a probe file the
+  qualifier emitted, meaning the two tools disagree" cannot occur through
+  tokenization. Both paths call the identical `LlamaModel.tokenize` with
+  identical arguments (`add_bos=False, special=False`). Josh's cross-check
+  agreeing was not evidence of luck; disagreement was structurally impossible.
+- His caveat that he exercised the alignment function through the
+  tokenizer-only interface rather than through `Engine` does not leave a gap:
+  `Engine.tok` and `single_token_id` route to the same call.
+
+**Failed**
+- I raised that risk as a live possible outcome of the next step. It was not
+  live, and five minutes reading `llama_tokenizer.py` would have shown that
+  before I raised it. Raising a false risk is cheaper than missing a real one
+  but it is still a claim made at a scope the evidence did not reach — the same
+  defect as the supersessions in the eighth entry.
+- The emitted probe file cannot be independently hash-verified by me:
+  `build_probe_file` writes `qualified_utc` from the clock, so the digest is
+  not reproducible from the qualification output. Contents can be checked;
+  the hash cannot. Taking the timestamp out of the hashed body would fix that
+  and has not been done.
+- The probe file itself has not been reviewed — it exists only as a path on
+  Josh's machine, which this session cannot read.
+- No declaration, no ledger write, no context, no forward pass. Floor gate
+  still unrun.
+
+**Would kill it**
+- The remaining real risk is representational, not logical: leading spaces in
+  `correct_str` (`" 73"`) and `wrong_str` (`" 44"`) are load-bearing and are the
+  most likely thing to be silently lost in a copy or an editor. If they are
+  lost, the candidates become different tokens and the gate will refuse — which
+  would be a file-integrity failure, not a probe failure, and must be recorded
+  as such.
