@@ -161,7 +161,8 @@ class Engine:
     state and feeds an explicit token list. Nothing is inferred.
     """
 
-    def __init__(self, model_path, n_ctx=512, n_threads=None, n_batch=512, seed=0):
+    def __init__(self, model_path, n_ctx=512, n_threads=None, n_batch=512, seed=0,
+                 verbose=False):
         import llama_cpp
         from llama_cpp import Llama
 
@@ -173,15 +174,43 @@ class Engine:
             n_batch=n_batch,
             seed=seed,
         )
-        self.llm = Llama(
-            model_path=model_path,
-            n_ctx=n_ctx,
-            n_threads=self.cfg["n_threads"],
-            n_batch=n_batch,
-            seed=seed,
-            logits_all=False,
-            verbose=False,
-        )
+        def _build(verbose):
+            return Llama(
+                model_path=model_path,
+                n_ctx=n_ctx,
+                n_threads=self.cfg["n_threads"],
+                n_batch=n_batch,
+                seed=seed,
+                logits_all=False,
+                verbose=verbose,
+            )
+
+        try:
+            self.llm = _build(verbose)
+        except Exception as e:
+            # llama.cpp writes the real reason to stderr and llama-cpp-python
+            # then raises a bare ValueError. With verbose=False those lines are
+            # suppressed, so the only thing that survives is a message that
+            # names no cause. Re-run loudly so the diagnostic is on the record,
+            # then re-raise. Never silently swallow the reason.
+            if not verbose:
+                sys.stderr.write(
+                    "\n=== context creation failed; re-running with llama.cpp "
+                    "logging enabled so the reason is visible ===\n")
+                sys.stderr.flush()
+                try:
+                    _build(True)
+                except Exception:
+                    pass
+                sys.stderr.write("=== end llama.cpp output ===\n")
+                sys.stderr.flush()
+            raise RuntimeError(
+                f"could not create llama context (n_ctx={n_ctx}, n_batch={n_batch}, "
+                f"n_threads={self.cfg['n_threads']}). Original: {e!r}. "
+                f"The llama.cpp output above names the cause. This is an apparatus "
+                f"fault before any declaration exists -- no gate failed and nothing "
+                f"has been established about the model."
+            ) from e
 
     # -- architecture check ------------------------------------------------
 
@@ -722,6 +751,44 @@ def cmd_restart(args):
     return 0 if passed else 1
 
 
+def cmd_doctor(args):
+    """
+    Diagnostic only. Not part of the battery, cannot pass or fail anything,
+    and touches no declaration. It exists to make the runtime say out loud
+    why it will not start.
+    """
+    import llama_cpp
+    print(f"llama_cpp version : {llama_cpp.__version__}")
+    print(f"model             : {args.model}")
+    print(f"exists            : {os.path.exists(args.model)}")
+    if os.path.exists(args.model):
+        print(f"size              : {os.path.getsize(args.model)/1e9:.2f} GB")
+    print()
+    tried = []
+    for n_ctx, n_batch in [(args.n_ctx, args.n_batch), (2048, 2048), (4096, 512), (1024, 1024)]:
+        print(f"--- attempting n_ctx={n_ctx} n_batch={n_batch} (llama.cpp logging ON) ---")
+        try:
+            eng = Engine(args.model, n_ctx, args.threads, n_batch, 0, verbose=True)
+            rec, arch = eng.arch_is_recurrent()
+            print(f"  OK. arch={arch} recurrent={rec}")
+            tried.append({"n_ctx": n_ctx, "n_batch": n_batch, "ok": True, "arch": arch})
+            print()
+            print("WORKING CONFIGURATION FOUND. Pass these to declare:")
+            print(f"  --n-ctx {n_ctx} --n-batch {n_batch}")
+            print()
+            print("Note: this sweep is apparatus diagnosis, not probe tuning. It changes "
+                  "no threshold and no probe, and no declaration existed to alter.")
+            return 0
+        except Exception as e:
+            print(f"  FAILED: {e}")
+            tried.append({"n_ctx": n_ctx, "n_batch": n_batch, "ok": False, "err": repr(e)})
+        print()
+    print("No configuration created a context. The llama.cpp output above is the evidence.")
+    print("Most likely: this build of llama.cpp cannot load this rwkv7 GGUF at all,")
+    print("which is a finding about the runtime, not about state retention.")
+    return 1
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -752,6 +819,13 @@ def main():
     s.add_argument("--tol", type=float, default=None)
     s.add_argument("--phase", choices=["save", "load"], default=None)
     s.set_defaults(fn=cmd_restart)
+
+    dr = sub.add_parser("doctor", help="diagnose why the runtime will not start (no gates, no declaration)")
+    dr.add_argument("--model", required=True)
+    dr.add_argument("--n-ctx", type=int, default=512)
+    dr.add_argument("--n-batch", type=int, default=512)
+    dr.add_argument("--threads", type=int, default=None)
+    dr.set_defaults(fn=cmd_doctor)
 
     a = ap.parse_args()
     sys.exit(a.fn(a))

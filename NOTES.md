@@ -154,3 +154,48 @@ Append-only. Never rewrite an entry. Four parts, all required.
 - The declare-time alignment gate refusing `KOR = 7319` would disqualify the
   probe before any experiment, and Declaration 2 would need different candidates.
   Checked on the first run.
+
+## 2026-09-19 (fourth entry) — first declared run aborted before any gate
+
+**Checked**
+- Josh ran `declare` from frozen commit `3e18e8d` against the real GGUF on his
+  Mac. It raised `ValueError: Failed to create llama_context`. `run` and
+  `restart` were not executed. No declaration file was written.
+- The path of that error in the harness: `Engine.__init__` constructed
+  `Llama(..., verbose=False)`.
+
+**Found**
+- No gate failed. No probe was disqualified. Nothing whatsoever was established
+  about RWKV state retention. The run aborted before the declaration existed,
+  so there is no Declaration 1 to supersede and no Declaration 2 is owed.
+- The harness suppressed the diagnostic that names the cause. llama.cpp writes
+  its reason to stderr and llama-cpp-python then raises a bare `ValueError`;
+  with `verbose=False` the reason is discarded and only the causeless message
+  survives. This is the second time in this session that I built a measurement
+  path whose failure channel was dead — the first was `llm.scores` returning
+  zeros.
+- Repaired: context creation now re-runs with llama.cpp logging on when it
+  fails, prints the output, and re-raises with the configuration named. Added a
+  `doctor` subcommand that sweeps context configurations with logging enabled.
+
+**Failed**
+- I set `n_ctx=512` as a non-default value earlier in this session to keep logit
+  buffers small. That is a prime suspect precisely because I introduced it, and
+  I have no evidence either way — I still cannot run any of this, so the repair
+  above is again unverified against a real model.
+- I cannot read the raw output or the verification archive Josh linked: they are
+  paths on his Mac and this session has no access to that filesystem. The
+  diagnosis above rests on the one-line error text alone.
+- Root cause is not established. Candidates not yet separated: the non-default
+  n_ctx, a batch/ubatch constraint specific to recurrent architectures, this
+  build of llama.cpp being unable to load this rwkv7 GGUF at all, or memory.
+  `doctor` is the discriminating probe and has not been run.
+
+**Would kill it**
+- `doctor` finding a working configuration would show the fault was my
+  non-default context sizing, and the apparatus proceeds unchanged.
+- `doctor` failing at every configuration with a load error naming rwkv7 would
+  mean this llama.cpp build cannot load this model, which is a finding about the
+  runtime and not about state retention — and would kill the plan of using this
+  binding for the battery at all.
+- Checked on Josh's next run.
