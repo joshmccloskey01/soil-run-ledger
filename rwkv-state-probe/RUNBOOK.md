@@ -68,12 +68,21 @@ python3 state_probe.py run \
 
 Runs in order, stops at the first failure:
 
-| gate | what it asks |
-|---|---|
-| `jitter` | how much does D wobble with the state held identical? (calibration) |
-| `floor` | can the probe see a known injected relation (`KOR = 7319`)? |
-| `causality` | same C, opposite states — does D flip sign? |
-| `specificity` | does the state move its own query rather than everything? |
+| step | what it asks | gate? |
+|---|---|---|
+| `jitter` | how much does D wobble with the state held identical? | no — calibration, cannot fail |
+| `floor` | can the probe see a known injected relation (`KOR = 7319`)? | **first gate** |
+| `causality` | same C, opposite states — does D flip sign? | gate |
+| `specificity` | does the state move its own query rather than everything? | gate |
+
+**Why `jitter` runs first even though `floor` is the first gate.** Jitter is not
+a test, it is the measurement of the runtime's own wobble, and it supplies the
+threshold the gates are scored against. `floor` passes only when the margin
+exceeds `noise_k × jitter_spread`. Scored against a flat zero instead, a margin
+smaller than the runtime's own noise would print PASS, and the battery would
+hand over an instrument that detects nothing. `noise_k` is currently 3.0 — a
+policy constant with no empirical basis, set by Claude, declared with that
+provenance and replaceable by a better-founded value in a new declaration.
 
 **If `floor` fails there is no instrument.** That is a recorded result, not a
 tuning prompt. Do not adjust `KOR` until it works — that is choosing the probe

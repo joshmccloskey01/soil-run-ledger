@@ -372,12 +372,22 @@ def build_declaration(eng, args):
         },
         "probes": probes,
         "thresholds": {
-            "floor_min_D": 0.0,
-            "floor_note": "D(state_A, query) > 0 means the probe can see an injected relation. "
-                          "If this fails there is no instrument, and that is a recorded "
+            "noise_k": 3.0,
+            "noise_k_provenance": "policy constant, set by Claude 2026-09-19, no empirical "
+                                  "basis. Every gate margin must exceed noise_k * the jitter "
+                                  "spread. Replaceable by a better-founded value in a NEW "
+                                  "declaration; this one stays in the chain.",
+            "floor_requires": "D(state_A) - D(fresh) > noise_k * jitter_spread. An absolute "
+                              "threshold of 0.0 would pass on noise: a margin smaller than the "
+                              "runtime's own wobble is not a detection. This is why jitter runs "
+                              "first -- it is calibration, and it supplies the threshold the "
+                              "floor gate is scored against. floor is still the first GATE; "
+                              "jitter is not a gate and cannot fail.",
+            "floor_note": "If this fails there is no instrument, and that is a recorded "
                           "result, not something to tune around.",
-            "causality_requires": "D(state_A) > 0 AND D(state_B) < 0 -- same C, same candidate "
-                                  "tokens, opposite states, D flips sign",
+            "causality_requires": "D(state_A) > +noise_k*spread AND D(state_B) < -noise_k*spread "
+                                  "-- same C, same candidate tokens, opposite states, D flips "
+                                  "sign by more than the noise floor",
             "specificity_min_ratio": 3.0,
             "specificity_note": "|dD_related| must exceed |dD_unrelated| by this factor. "
                                 "Requiring zero drift would be too strong: any state shifts "
@@ -424,8 +434,10 @@ def run_jitter(eng, decl, reps=5):
             "suggested_restart_tol": max(spread * 10.0, 1e-3)}
 
 
-def run_floor(eng, decl):
+def run_floor(eng, decl, spread):
+    """Scored against the measured noise floor, not against zero."""
     p = decl["probes"]["relation"]
+    need = decl["thresholds"]["noise_k"] * spread
 
     def with_A():
         eng.reset()
@@ -433,12 +445,13 @@ def run_floor(eng, decl):
 
     d_state = measure(eng, with_A, p["query"], p["correct_id"], p["wrong_id"])
     d_fresh = measure(eng, eng.reset, p["query"], p["correct_id"], p["wrong_id"])
-    passed = d_state > decl["thresholds"]["floor_min_D"] and d_state > d_fresh
-    return {"D_with_state": d_state, "D_fresh": d_fresh,
-            "delta": d_state - d_fresh, "pass": passed}
+    delta = d_state - d_fresh
+    return {"D_with_state": d_state, "D_fresh": d_fresh, "delta": delta,
+            "required_margin": need, "jitter_spread": spread,
+            "pass": delta > need}
 
 
-def run_causality(eng, decl):
+def run_causality(eng, decl, spread):
     p = decl["probes"]["relation"]
 
     def mk(text):
@@ -449,7 +462,9 @@ def run_causality(eng, decl):
 
     d_a = measure(eng, mk(p["state_A"]), p["query"], p["correct_id"], p["wrong_id"])
     d_b = measure(eng, mk(p["state_B"]), p["query"], p["correct_id"], p["wrong_id"])
-    return {"D_state_A": d_a, "D_state_B": d_b, "pass": (d_a > 0 and d_b < 0)}
+    need = decl["thresholds"]["noise_k"] * spread
+    return {"D_state_A": d_a, "D_state_B": d_b, "required_margin": need,
+            "jitter_spread": spread, "pass": (d_a > need and d_b < -need)}
 
 
 def run_specificity(eng, decl):
@@ -538,17 +553,19 @@ def cmd_run(args):
         return 2
 
     results = {"declaration_sha256": decl["declaration_sha256"], "run_utc": _utc()}
+    spread = None
     order = ["jitter", "floor", "causality", "specificity"]
     gate_failed = None
 
     for name in order:
         if name == "jitter":
             r = run_jitter(eng, decl)
-            r["pass"] = True  # calibration, not a gate
+            r["pass"] = True  # calibration, not a gate -- it cannot fail
+            spread = r["spread"]
         elif name == "floor":
-            r = run_floor(eng, decl)
+            r = run_floor(eng, decl, spread)
         elif name == "causality":
-            r = run_causality(eng, decl)
+            r = run_causality(eng, decl, spread)
         else:
             r = run_specificity(eng, decl)
         results[name] = r
