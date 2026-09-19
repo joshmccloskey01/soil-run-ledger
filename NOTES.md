@@ -199,3 +199,40 @@ Append-only. Never rewrite an entry. Four parts, all required.
   runtime and not about state retention — and would kill the plan of using this
   binding for the battery at all.
 - Checked on Josh's next run.
+
+## 2026-09-19 (fifth entry) — separation of instrument/diagnostics/results; hygiene defect
+
+**Checked**
+- Git object state: `3e18e8d` exists and is unchanged; branch head has since
+  moved to `8708201`. `git ls-files` on the frozen commit shows
+  `rwkv-state-probe/__pycache__/state_probe.cpython-311.pyc` as a tracked file.
+
+**Found**
+- Decision made by Josh, recorded rather than re-derived: the frozen instrument
+  is preserved by commit identity, not by holding the branch head still. Three
+  layers stay explicitly separate — instrument = checkout `3e18e8d`;
+  diagnostics = current branch; results = external run record and ledger.
+  `60fcfd1` is not reverted.
+- Hygiene defect, recorded as such at Josh's instruction: a compiled `.pyc` of
+  the harness is carried inside `3e18e8d`, swept in by an earlier `git add -A`
+  of mine. It does not invalidate the declaration attempt — CPython validates a
+  `.pyc` against its source before use — and the historical commit is left
+  untouched. Untracked going forward, with `.gitignore` added for build and run
+  outputs.
+
+**Failed**
+- The defect is mine and was avoidable: `git add -A` on a directory I had just
+  run `py_compile` in. It put a build artifact inside the one commit whose
+  entire purpose is to be a fixed reference.
+- `.gitignore` was added only after four commits had already been made, so any
+  run output produced before now could have been swept into the source tree the
+  same way. None was, but that was luck rather than design.
+- The diagnostic has not been run. I cannot run it: it needs the model file and
+  a Mac, and this session is a Linux container with no access to either. Nothing
+  new is established about the context-creation failure.
+
+**Would kill it**
+- If a future checkout of `3e18e8d` behaves differently from what the runbook
+  describes, the `.pyc` would become a real provenance problem rather than a
+  cosmetic one, and the frozen commit could no longer be treated as a clean
+  reference. Checked whenever `3e18e8d` is next checked out and run.
