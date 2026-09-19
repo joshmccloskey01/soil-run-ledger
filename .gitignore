@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+
+# apparatus run outputs: results and logs belong in the ledger and the run
+# record, not in the source tree
+context-diagnosis.log
+declaration.json
+results.json
+*.state
+*.state.meta.json
+state_probe.db
