@@ -2,10 +2,15 @@
 """
 Probe qualification -- TOKENIZER ONLY.
 
-Loads the model with vocab_only=True. No context is created, no forward pass
-is possible, and no logit can be read. Selecting a probe because the model
-answers it correctly is therefore not merely forbidden here, it is
-unavailable: this tool cannot observe model behaviour at all.
+Loads via _internals.LlamaModel, which constructs NO context. llama_init_from_model
+is never called, so no forward pass is reachable and no logit can be read.
+Selecting a probe because the model answers it correctly is therefore not
+merely forbidden here, it is unavailable: this tool cannot observe model
+behaviour at all.
+
+NOTE: do not "simplify" this to the high-level Llama constructor. Llama with
+vocab_only=True still creates a context (0.3.35, llama.py:413), which breaks
+this guarantee.
 
 What it checks, per candidate design, for BOTH state values:
 
@@ -15,7 +20,10 @@ What it checks, per candidate design, for BOTH state values:
   2. FIRST TOKEN the value contributes at least one token past the prefix
   3. ROUND TRIP  detokenize(first_token) re-tokenizes to exactly that one
                  token, so the candidate can be written into the probe file
-                 as a string and re-verified later by the alignment gate
+                 as a string and re-verified later by the alignment gate.
+                 A round-trip failure is a REPRESENTATION failure of the
+                 string-based candidate interface. It is not evidence about
+                 state retention and must never be recorded as such.
   4. DISTINCT    candidate_A != candidate_B, or D cannot discriminate
 
 A design passes only if all four hold for both values, and for the unrelated
@@ -75,17 +83,36 @@ DEFAULT_DESIGNS = {
 
 
 class Vocab:
-    """vocab_only load. No context, no logits, no forward pass."""
+    """
+    Model-only load. Constructs NO context.
+
+    An earlier version of this file used the high-level `Llama` constructor
+    with vocab_only=True and claimed that guaranteed no context. That was
+    false: in llama-cpp-python 0.3.35 `Llama.__init__` creates a LlamaContext
+    unconditionally (llama.py line 413); vocab_only only sets a model
+    parameter (line 246). The guarantee this tool's docstring sold did not
+    exist, and the tool would also have failed anywhere context creation
+    fails, such as the sandboxed runner.
+
+    `_internals.LlamaModel` takes a model path and params and constructs no
+    context at all, so `llama_init_from_model` is never called and no forward
+    pass is reachable from here.
+    """
 
     def __init__(self, model_path):
-        from llama_cpp import Llama
-        self.llm = Llama(model_path=model_path, vocab_only=True, verbose=False)
+        import llama_cpp
+        from llama_cpp import _internals as internals
+
+        params = llama_cpp.llama_model_default_params()
+        params.vocab_only = True
+        self._m = internals.LlamaModel(path_model=model_path, params=params,
+                                       verbose=False)
 
     def tok(self, s):
-        return self.llm.tokenize(s.encode("utf-8"), add_bos=False, special=False)
+        return self._m.tokenize(s.encode("utf-8"), False, False)
 
     def detok(self, ids):
-        return self.llm.detokenize(ids).decode("utf-8", "replace")
+        return self._m.detokenize(list(ids)).decode("utf-8", "replace")
 
 
 def check_pair(v, query, value):
@@ -108,8 +135,11 @@ def check_pair(v, query, value):
     out.update(first_token=first, first_token_str=s, round_trip=rt)
 
     if rt != [first]:
-        out.update(pass_=False, reason=f"ROUND TRIP: detokenized {s!r} re-tokenizes to {rt}, "
-                                       f"not [{first}]")
+        out.update(pass_=False,
+                   reason=f"ROUND TRIP: detokenized {s!r} re-tokenizes to {rt}, not "
+                          f"[{first}] -- this is a REPRESENTATION failure of the "
+                          f"string-based candidate interface, NOT evidence about state "
+                          f"retention, and must never be recorded as such")
         return out
 
     out.update(pass_=True, reason="ok")
@@ -149,8 +179,9 @@ def build_probe_file(d, r, design_name, model_path, model_sha):
         "note": d["note"],
         "qualified_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "qualified_against_model_sha256": model_sha,
-        "selection_basis": "tokenization alignment only; no model forward pass was "
-                           "performed by the qualifying tool (vocab_only=True)",
+        "selection_basis": "tokenization alignment only. The qualifying tool loads via "
+                           "_internals.LlamaModel, which constructs no context, so no "
+                           "forward pass was performed or was reachable.",
         "relation": {
             "state_A": d["query"] + d["value_A"] + "\n",
             "state_B": d["query"] + d["value_B"] + "\n",

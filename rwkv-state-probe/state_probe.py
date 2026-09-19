@@ -443,9 +443,20 @@ def build_declaration(eng, args, probe_data, probe_sha):
     # it checks that the discriminator compares the tokens it claims to compare.
     align = {}
     rel = probes["relation"]
-    for label, value, cand in (("state_A", rel["value_A"], rel["correct_id"]),
-                               ("state_B", rel["value_B"], rel["wrong_id"])):
-        ok, detail = eng.verify_alignment(rel["query"], value, cand)
+    unr = probes["unrelated"]
+    # Validation EXTENSION beyond 3e18e8d, reviewed and approved: the frozen
+    # gate checked only the two relation values, so an edited probe file could
+    # carry unrelated candidates that are distinct single tokens -- passing
+    # single_token_id -- while not being the first token of their declared
+    # values. The specificity gate would then compare tokens the model would
+    # never emit, in the very gate meant to detect spurious drift.
+    for label, q, value, cand in (
+        ("state_A", rel["query"], rel["value_A"], rel["correct_id"]),
+        ("state_B", rel["query"], rel["value_B"], rel["wrong_id"]),
+        ("unrelated_correct", unr["query"], unr["value_correct"], unr["correct_id"]),
+        ("unrelated_wrong", unr["query"], unr["value_wrong"], unr["wrong_id"]),
+    ):
+        ok, detail = eng.verify_alignment(q, value, cand)
         align[label] = {"pass": ok, **detail}
     if not all(a["pass"] for a in align.values()):
         raise SystemExit(

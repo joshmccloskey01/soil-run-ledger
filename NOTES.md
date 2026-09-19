@@ -494,3 +494,56 @@ not edits to it.
   tools disagree, and the new one would be wrong until reconciled. It is
   retained in the design list for exactly that reason.
 - Checked when Josh runs qualification.
+
+## 2026-09-19 (eleventh entry) — two review findings confirmed and fixed
+
+**Checked**
+- `llama_cpp/llama.py` in the installed 0.3.35: line 246 sets
+  `self.model_params.vocab_only = vocab_only`; line 413 constructs
+  `internals.LlamaContext(...)` with no guard on it.
+- `_internals.LlamaModel.__init__(path_model, params, verbose)` — no context
+  reference anywhere in its construction path; exposes `tokenize`,
+  `detokenize`, `token_to_piece`, `n_vocab`.
+- My own `build_declaration` alignment loop at line 446: iterates only over
+  `state_A` and `state_B`.
+
+**Found**
+- Josh's finding 1 is correct. `Llama(vocab_only=True)` creates a context. The
+  "no context is created, no forward pass is possible" guarantee in the
+  qualifier's docstring was false as written. Fixed by loading through
+  `_internals.LlamaModel`, which never calls `llama_init_from_model`. A comment
+  now warns against "simplifying" it back to the high-level constructor.
+- Josh's finding 2 is correct. The alignment gate covered only the two relation
+  values. An edited probe file could carry unrelated candidates that are
+  distinct single tokens — passing `single_token_id` — without being the first
+  token of their declared values, and the specificity gate would then compare
+  tokens the model would never emit. That is the gate meant to detect spurious
+  drift, so the failure would have been silent and in the worst place. Extended
+  to all four pairs, using the existing `verify_alignment` unchanged.
+- Round-trip failures are now labelled in the output as representation failures
+  of the string-based candidate interface, explicitly not evidence about state
+  retention.
+
+**Failed**
+- The false guarantee is the more serious of the two. I did not merely fail to
+  prevent context creation; I wrote a docstring asserting it was structurally
+  impossible, and committed that claim. It would also have made the qualifier
+  fail inside the sandboxed runner for the same Metal reason as everything
+  else, which would have looked like a probe problem.
+- Both findings came from Josh reading source. Neither was caught by me, and I
+  had verified the wrong things: I checked that `vocab_only` was an accepted
+  kwarg and stopped there, without checking what it actually gated.
+- The extension to four pairs is a change beyond "gate unchanged". It is the
+  explicit validation extension Josh sanctioned, but it is a change to the
+  gate's coverage and is recorded as such rather than folded in silently.
+- Still nothing run against real weights. `_internals.LlamaModel` usage is
+  unverified in execution; its argument order and the `params.vocab_only` field
+  were checked by signature inspection only.
+
+**Would kill it**
+- `_internals.LlamaModel` failing to load or tokenize would mean the qualifier
+  has no working model-only path in this binding, and the guarantee would have
+  to be met some other way or dropped honestly.
+- The extended alignment gate rejecting a probe file that the qualifier emitted
+  would mean the two tools disagree about alignment, and the declaration path
+  would be wrong until reconciled.
