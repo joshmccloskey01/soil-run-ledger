@@ -287,3 +287,53 @@ Append-only. Never rewrite an entry. Four parts, all required.
   on this machine, and the only remaining route is a build with Metal compiled
   out -- a version change, which is Josh's decision, not mine.
 - Checked on Josh's next run.
+
+## 2026-09-19 (seventh entry) — Metal denial localized to the Codex seatbelt sandbox
+
+**Checked**
+- Direct `MTLCreateSystemDefaultDevice()` via ctypes from `probe-venv/bin/python`,
+  with no llama.cpp and no model loaded: returned `None`.
+- Same call from `/usr/bin/python3`: also `None`. No third interpreter present.
+- `system_profiler SPDisplaysDataType`: Apple M4 Pro, 20 GPU cores, Metal:
+  Supported.
+- Environment of the failing runner: `CODEX_SANDBOX=seatbelt`,
+  `CODEX_SANDBOX_NETWORK_DISABLED=1`, `XPC_SERVICE_NAME=0`. `ps` is blocked
+  ("operation not permitted"), so process ancestry could not be walked.
+- Earlier: `launchctl managername` returned `Aqua`, `SSH_TTY=none`.
+
+**Found**
+- The failure is reproducible in six lines with neither llama.cpp nor the model
+  present. It is process-environment denial of a Metal device, not a property of
+  the model file, the llama.cpp build, the frozen harness, or any parameter I
+  chose. Every apparatus-side suspicion I raised across this session is
+  excluded by this result.
+- The hardware is fully Metal-capable, so "Metal unavailable on this machine" is
+  dead as a hypothesis.
+- Two different interpreters inside the same sandbox both get `None`, which
+  weakens the interpreter hypothesis — the denial is not binary-specific.
+- Both remaining routes converge on one dependency: a shell outside the sandbox.
+  Confirming the cause needs it, and so does a Metal-free rebuild, because
+  `pip` cannot reach the network with `CODEX_SANDBOX_NETWORK_DISABLED=1`.
+
+**Failed**
+- The sandbox is a strong candidate, not an established cause. The
+  discriminating test — the same call from outside the sandbox — has not run,
+  because the available tooling cannot open an unsandboxed shell. Recording it
+  as "localized to the sandboxed process" rather than "caused by the sandbox".
+- Probe 4 was presented by me as testing the interpreter hypothesis. It did not:
+  both interpreters ran inside the same sandbox, so it could only show the
+  denial is not binary-specific. The hypothesis remains untested independently.
+- `launchctl managername` returning `Aqua` was, in hindsight, weak evidence I
+  proposed as a discriminator. It reports the launchd domain, which a seatbelt
+  sandbox does not change. The probe could not have distinguished the cases I
+  claimed it would.
+- Still nothing established about RWKV state retention. No gate has run. No
+  declaration exists. Six sessions of apparatus work, zero returns from the
+  instrument.
+
+**Would kill it**
+- The same ctypes call returning a non-null device outside the sandbox would
+  establish the sandbox as the cause and clear everything else.
+- It returning `None` outside the sandbox too would mean the cause is something
+  else entirely on this machine, and the diagnosis restarts.
+- Checked when an unsandboxed shell is available.
