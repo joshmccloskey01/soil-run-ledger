@@ -1057,3 +1057,64 @@ before committing this time.
   model. That build is separate from the theory and must not be confused with
   it: it would demonstrate retention, which is the thing already shown, and not
   correction, which is the thing that matters to the framework.
+
+## 2026-09-20 (ninth entry) — the numbers, and a correction to the eighth entry
+
+**Checked**
+- `results.json`, hash `15c8667e…433ac`, verified by Josh against its ledger
+  event. Declaration `8cdcda48…9301`. Run `2026-09-20T04:04:21Z`.
+- jitter: 20 measurements, all exactly 6.815009117126465. spread_range 0.0,
+  spread_stdev 0.0, deterministic.
+- floor: D_with_state 6.815009117126465, D_fresh -0.4451932907104492,
+  delta 7.260202407836914, required_margin 0.5, binding term
+  `min_margin_abs (ARBITRARY)`.
+- causality: D_state_A +6.815009117126465, D_state_B -6.223068356513977,
+  same required_margin and binding term.
+- specificity: shift_related 7.260202407836914, shift_unrelated
+  0.22548314929008484, ratio 32.198425606059985 against a required 3.0.
+
+**Correction to the eighth entry, superseded 2026-09-20**
+- I wrote that "bit-identical logits are what a correct implementation should
+  produce" and treated the restart result as evidence of that. **That
+  overstates what was measured.** What matched exactly is D — one scalar, the
+  difference between two logits at one position. Full logit vectors were not
+  compared, and the state tensors were not compared bit-for-bit. Two different
+  restored states could yield the same D. The correct statement is that the
+  state was restored **sufficiently to reproduce this measurement**, not that it
+  was restored exactly. Josh caught this; the eighth entry stands as written
+  with this correction attached.
+
+**Found**
+- The arbitrary-constant worry I flagged is largely defused, and by the data
+  rather than by argument. Both gates did bind on `min_margin_abs = 0.5`, as
+  predicted — but the observed effects are 12–15x that threshold:
+  floor delta 14.5x, causality +13.6x and -12.5x. The constant would only have
+  mattered if the effect had landed near it. It did not. Any threshold between
+  roughly 0.01 and 5 would have produced the same verdict.
+- In interpretable terms: the state shifts the relative odds of the two
+  candidate tokens by a factor of about 1,400 (floor), and the A-vs-B swing is
+  13.04 logits, about 460,000x. These are not marginal effects.
+- The specificity confound logged before the declaration is now **measured** and
+  negligible: the unrelated shift is 0.225 logits, 3.1% of the related shift,
+  against a ratio of 32.2 where 3.0 was required. The digit overlap between
+  `state_A` and the `' 3'` candidate did not meaningfully contaminate it.
+- `D_fresh = -0.445` is a useful incidental: with no state the model is close to
+  indifferent between the candidates, slightly favouring the wrong one. That is
+  a good baseline for this probe. It was not designed for -- selection was on
+  tokenization alignment only, correctly -- so it is luck, not merit.
+
+**Failed / still not established**
+- Retention, not correction. §33 untouched. Steps 4 and 5 unbuilt.
+- The full state was not verified to round-trip; only this measurement was.
+- Determinism (spread 0.0 over 20) makes the restart comparison meaningful, but
+  it also means this run says nothing about behaviour under any nondeterminism.
+- One model, one probe set, one runtime, one machine, one run.
+
+**Would kill it**
+- A second probe set — particularly one whose `state_A` shares no characters
+  with its unrelated candidates — failing would mean the result is
+  probe-specific.
+- A bit-for-bit comparison of saved and restored state tensors showing
+  differences would not overturn the measurement, but would bound the claim
+  further: it would show the state is restored only approximately and that D is
+  insensitive to whatever differs.
