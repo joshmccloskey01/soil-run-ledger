@@ -1159,3 +1159,42 @@ before committing this time.
   sufficiently to reproduce the measured D exactly, for this model, this probe
   set and this runtime. All four declared gates passed.
 - Correction remains untested. §33 untouched.
+
+## 2026-09-20 (eleventh entry) — the proposed confound test was itself confounded
+
+**Checked**
+- Josh's review of the discriminating test proposed in the tenth entry.
+
+**Found — correction, mine, superseding the tenth entry's proposal**
+- The test I proposed — same `state_A`, unrelated candidates changed from
+  `' 3'`/`' 8'` to digits absent from both values — **does not isolate the
+  overlap**. Changing the candidates changes the overlap and the token identity
+  at the same time. Different tokens can respond differently to the same state
+  with no overlap involved, so a difference between the two unrelated shifts
+  would have two available explanations and no way to choose between them.
+  What that comparison actually measures is **sensitivity to the choice of
+  unrelated probe**, which is a different and lesser question.
+- The variable that must move is the **state**, not the candidates. A design
+  that could estimate the overlap contribution: hold the unrelated query and its
+  candidate tokens fixed, and counterbalance the same tokens across state
+  conditions that do and do not contain the overlapping character — for example
+  a state containing `3` and not `8`, one containing `8` and not `3`, and one
+  containing neither. The difference in the unrelated shift across those
+  conditions is attributable to the overlap because nothing else moved.
+  Alignment checked for every new state value, and the comparison declared
+  before measurement, as with any other.
+- Not a plan. Recorded as a design, for a separate experiment.
+
+**Failed**
+- Third narrowing of my own claims in a row, and they share a shape: I reached
+  for the cheapest-looking next test rather than the one that isolates the
+  variable. The first two were overstatements of what a number supported; this
+  one was worse, because a confounded test would have produced a number and the
+  number would have looked like an answer.
+- The confound's contribution remains unmeasured. The pre-declaration
+  limitation stands undischarged, and nothing in this entry changes that.
+
+**Unchanged**
+- Saved state survived a process restart sufficiently to reproduce the measured
+  D exactly, for this model, this probe set and this runtime. All four declared
+  gates passed. Correction untested. §33 untouched.
