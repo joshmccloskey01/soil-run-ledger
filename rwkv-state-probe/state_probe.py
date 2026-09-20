@@ -664,37 +664,66 @@ def run_restart_load(eng, decl, state_file):
 
 # ---------------------------------------------------------------- cli
 
-def persist_declaration(decl, decl_path, led, _rename=None):
+def persist_declaration(decl, decl_path, led, _link=None):
     """
-    Order of operations, and why.
+    Order of operations, and why each part is the way it is.
 
-    The previous revision wrote declaration.json FIRST, then constructed the
-    Ledger, then committed -- and Ledger swallows every failure into ok=False,
-    so `declare` exited 0 with a declaration on disk and nothing in the chain.
-    An uncommitted declaration is precisely what the precommitment exists to
-    prevent: a claim that can still be changed before the measurement.
+    The revision before this wrote declaration.json FIRST and swallowed every
+    ledger failure, so `declare` could exit 0 with a declaration on disk and
+    nothing in the chain. An uncommitted declaration is exactly what the
+    precommitment exists to prevent.
 
-    Reversing it naively creates the opposite hazard -- the chain commits and
-    then the file write fails, leaving a commitment with no local record. So:
+    Reversing that naively creates three further hazards, all found in review:
 
-      1. write the declaration to a .pending file and fsync it (durable, but
-         NOT at the declaration path, so nothing can mistake it for one)
-      2. commit the FULL declaration body to the chain, not just its hashes,
-         so the chain alone is sufficient to recover it
-      3. publish by atomic rename
+    FLOATS. canon/1 is "RFC 8785 (JCS) MINUS IEEE-754 floats" -- integers only,
+    and a token containing `.`, `e` or `E` is rejected as FLOAT_IN_HASHED_FIELD.
+    Committing the declaration as a dict therefore fails on noise_k 3.0,
+    min_margin_abs 0.5 and specificity_min_ratio 3.0. The declaration is
+    committed as serialized JSON TEXT plus its byte hash instead. The thresholds
+    themselves are unchanged; only the representation inside the event differs.
+    The committed text is byte-identical to the published file, so the hash in
+    the chain verifies the file exactly.
 
-    Failure at 1  -> nothing committed, nothing written.
-    Failure at 2  -> .pending removed, nothing in the chain, refuse.
-    Failure at 3  -> chain HAS it and .pending HAS it: recoverable twice over,
-                     and the recovery instruction is printed rather than left
-                     for someone to work out.
+    CLOBBERING. `open(pending, "w")` truncates an existing recovery file and
+    `os.replace` overwrites an existing declaration -- so a second declare could
+    destroy an unrecovered .pending or an existing commitment. Both paths are
+    now refused up front, the pending file is created O_EXCL, and publication
+    uses os.link, which fails with EEXIST rather than overwriting.
+
+      1. refuse if either the declaration or a .pending already exists
+      2. create .pending exclusively, write, fsync
+      3. commit the serialized declaration text to the chain
+      4. publish by hard link (atomic, cannot overwrite), then drop .pending
+
+    Failure at 2 -> nothing committed, nothing written.
+    Failure at 3 -> .pending removed, nothing in the chain, refuse.
+    Failure at 4 -> chain HAS it and .pending HAS it: recoverable twice over,
+                    with the recovery command printed.
     """
-    rename = _rename or os.replace
+    link = _link or os.link
     blob = json.dumps(decl, indent=2, sort_keys=True) + "\n"
+    blob_bytes = blob.encode("utf-8")
+    blob_sha = hashlib.sha256(blob_bytes).hexdigest()
     pending = decl_path + ".pending"
 
-    with open(pending, "w") as f:
-        f.write(blob)
+    if os.path.exists(decl_path):
+        raise SystemExit(
+            f"REFUSING: {decl_path} already exists. A declaration is a "
+            f"precommitment; overwriting one silently replaces a claim that has "
+            f"already been committed to the chain. Move it aside deliberately, "
+            f"or declare to a different path."
+        )
+    if os.path.exists(pending):
+        raise SystemExit(
+            f"REFUSING: {pending} already exists. That is an unrecovered "
+            f"declaration from a previous run whose publication failed, and its "
+            f"commitment is already in the chain. Recover or remove it "
+            f"deliberately before declaring again."
+        )
+
+    fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    with os.fdopen(fd, "wb") as f:
+        f.write(blob_bytes)
         f.flush()
         os.fsync(f.fileno())
 
@@ -706,9 +735,11 @@ def persist_declaration(decl, decl_path, led, _rename=None):
             "probe_file_sha256": decl["probe_file_sha256"],
             "probe_set_id": decl["probe_set_id"],
             "declared_utc": decl["declared_utc"],
-            # full body: the chain is sufficient to recover the declaration
-            # even if every local file is lost
-            "declaration": decl,
+            # Serialized TEXT, never a dict: canon/1 rejects floats, and the
+            # thresholds are floats. The chain is still sufficient to recover
+            # the declaration, because this is the whole of it.
+            "declaration_json": blob,
+            "declaration_json_sha256": blob_sha,
         })
     except Exception as e:
         try:
@@ -731,16 +762,21 @@ def persist_declaration(decl, decl_path, led, _rename=None):
         )
 
     try:
-        rename(pending, decl_path)
+        link(pending, decl_path)
     except Exception as e:
         raise SystemExit(
             f"COMMITTED BUT NOT PUBLISHED: the declaration IS in the chain as "
             f"event {ev}, but publishing it to {decl_path} failed ({e!r}).\n"
-            f"Nothing is lost. The exact bytes are at {pending}, and the full "
-            f"declaration body is inside the ledger event.\n"
+            f"Nothing is lost. The exact bytes are at {pending} "
+            f"(sha256 {blob_sha}), and the full declaration text is inside the "
+            f"ledger event.\n"
             f"Recover with:  mv {pending!r} {decl_path!r}\n"
             f"Do NOT re-run declare -- that would commit a second declaration."
         )
+    try:
+        os.unlink(pending)
+    except OSError:
+        pass
     return ev
 
 
@@ -758,17 +794,19 @@ def cmd_declare(args):
               f"and nothing is in the chain. Fix the ledger path, then declare.")
         return 3
 
-    eng = Engine(args.model, args.n_ctx, args.threads, args.n_batch, args.seed)
-    rec, arch = eng.arch_is_recurrent()
-    if rec is False:
-        print(f"REFUSING: model architecture is {arch!r}, which is not recurrent.")
-        print("A transformer's saved 'state' is a KV cache of replayed tokens.")
-        print("This battery would measure replay, which is the thing it exists to rule out.")
-        return 2
-    probe_data, probe_sha = load_probes(args.probes)
-    decl = build_declaration(eng, args, probe_data, probe_sha)
-
+    # Everything after the ledger opens is inside try/finally. Model loading and
+    # declaration construction can both raise or SystemExit, and previously
+    # either one leaked an open ledger handle.
     try:
+        eng = Engine(args.model, args.n_ctx, args.threads, args.n_batch, args.seed)
+        rec, arch = eng.arch_is_recurrent()
+        if rec is False:
+            print(f"REFUSING: model architecture is {arch!r}, which is not recurrent.")
+            print("A transformer's saved 'state' is a KV cache of replayed tokens.")
+            print("This battery would measure replay, which is the thing it exists to rule out.")
+            return 2
+        probe_data, probe_sha = load_probes(args.probes)
+        decl = build_declaration(eng, args, probe_data, probe_sha)
         ev = persist_declaration(decl, args.decl, led)
     finally:
         led.close()

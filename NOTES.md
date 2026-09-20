@@ -698,3 +698,57 @@ not edits to it.
 - A `COMMITTED BUT NOT PUBLISHED` outcome would mean the chain holds a
   declaration the filesystem does not; the recovery is the printed `mv`, and
   re-running declare would wrongly commit a second declaration.
+
+## 2026-09-20 (second entry) — three review findings on the declaration path
+
+**Checked**
+- `ledger core 2/code/canon1.py` line 4: "canon/1 = RFC 8785 (JCS) MINUS
+  IEEE-754 floats"; line 48: a token containing `.`, `e` or `E` is rejected as
+  `FLOAT_IN_HASHED_FIELD`. Confirms Josh's real-ledger result
+  `CanonRejected("FLOAT_IN_HASHED_FIELD: '3.0' at offset 1379")`.
+- My own code: `open(pending, "w")` truncates; `os.replace` overwrites the
+  destination; the `try/finally` began after `Engine(...)` and
+  `build_declaration(...)`, both of which can raise or SystemExit.
+- Ten failure paths executed, no model, faked ledger.
+
+**Found**
+- All three findings confirmed. Fixes:
+  1. The declaration is committed as serialized JSON **text** plus its byte
+     hash (`declaration_json`, `declaration_json_sha256`), never as a dict. The
+     thresholds keep their values — 3.0, 0.5, 3.0, 20 — only the representation
+     inside the event changed. The committed text is byte-identical to the
+     published file, so the hash in the chain verifies the file exactly.
+  2. `declare` refuses if either the declaration or a `.pending` already
+     exists; `.pending` is created `O_EXCL`; publication uses `os.link`, which
+     fails with EEXIST rather than overwriting.
+  3. Everything after the ledger opens is inside `try/finally`.
+- Tests added for each: event body asserted to contain no float anywhere while
+  the fixture declaration does contain floats; existing declaration and existing
+  `.pending` both refused with the files verified unmodified; a destination that
+  appears mid-run is not overwritten and `.pending` survives; the ledger is
+  confirmed closed after a model-loading failure.
+
+**Failed**
+- Three defects in one revision, all in the code I had just described as
+  tested. The float rejection is the one I should have caught by reading:
+  `canon1.py` states the rule in its fourth line, the thresholds are the only
+  numbers in the declaration, and I committed the whole dict without checking
+  what the ledger accepts. I had the ledger source unpacked the entire session.
+- The clobbering defects came from me writing the recovery mechanism and then
+  not asking what happens when it runs twice. A `.pending` file exists precisely
+  because a previous run failed, so the second run is the case that matters, and
+  it was the case that destroyed it.
+- The `try/finally` placement was mine from the previous commit, introduced in
+  the same change that was meant to make cleanup correct.
+- All ten tests still use a faked ledger. Josh's real-ledger check is the only
+  thing that has touched `genesis`/`storage`/`append`, and it found the float
+  rejection that my tests could not.
+- No declaration. No gate has run. Nothing established about state retention.
+
+**Would kill it**
+- A second `CanonRejected` on a field I have not considered would mean I still
+  do not know what the ledger accepts, and the event body needs auditing field
+  by field against canon/1 rather than fixed one rejection at a time.
+- `os.link` failing on the target filesystem would make publication unavailable
+  as written; the failure is safe (commit stands, `.pending` preserved) but the
+  mechanism would need replacing.
