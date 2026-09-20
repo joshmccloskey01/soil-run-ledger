@@ -1118,3 +1118,44 @@ before committing this time.
   differences would not overturn the measurement, but would bound the claim
   further: it would show the state is restored only approximately and that D is
   insensitive to whatever differs.
+
+## 2026-09-20 (tenth entry) — two narrowings of the ninth entry, superseded same day
+
+**Checked**
+- Josh's review of the ninth entry against what the run actually isolated.
+
+**Found — corrections, both mine**
+
+1. **Threshold robustness.** I wrote that the arbitrary-constant worry was
+   "defused by the data rather than by argument". Too strong, and in a way that
+   quietly rehabilitates the constant. What the run shows: the verdict is
+   insensitive to a wide range of alternative margins **in this run**, because
+   the effects landed 12-15x from the declared 0.5. That is a **retrospective
+   sensitivity check**. It gives `min_margin_abs = 0.5` no empirical basis
+   whatever. It was picked because it was a round number, it still is, and if a
+   later run lands near it the constant will matter again and still have nothing
+   under it. Superseded 2026-09-20.
+
+2. **Specificity.** I wrote "the confound is measured and negligible". It is
+   not. What was measured is the **relative shift**: the unrelated query's D
+   moved 0.225 logits against the related query's 7.260, a ratio of 32.2 where
+   3.0 was declared. That says the unrelated shift as a whole is small. It does
+   **not** decompose 0.225 into the part caused by the logged digit overlap
+   (`state_A` contains the character `3`; the unrelated candidates are `' 3'`
+   and `' 8'`) and the part caused by generic state influence on an unrelated
+   query. The confound was never isolated, so its contribution is unmeasured,
+   not negligible. The pre-declaration limitation stands undischarged.
+   Superseded 2026-09-20.
+
+**The discriminating test for (2), not run**
+- Same `state_A`, two unrelated probe sets measured side by side: the current
+  `' 3'`/`' 8'`, and one drawn from digits absent from both values -- 0, 5, 6, 8.
+  The difference between the two unrelated shifts isolates the overlap's
+  contribution. Until that is run, "the confound did not prevent the gate
+  passing" is the whole of what can be said.
+
+**Unchanged**
+- Supported conclusion, in full: saved state survived a process restart
+  sufficiently to reproduce the measured D exactly, for this model, this probe
+  set and this runtime. All four declared gates passed.
+- Correction remains untested. §33 untouched.
