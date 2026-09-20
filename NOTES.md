@@ -941,3 +941,49 @@ not edits to it.
   data would mean per-instance fixing has failed as a method here, and the
   recording paths should be collapsed into one audited implementation rather
   than two parallel ones kept in sync by hand.
+
+## 2026-09-20 (seventh entry) — three orchestration defects; a test found a fourth
+
+**Checked**
+- Josh's review of `2931465`. The fsync-intact and run-cleanup fixes hold
+  against a real ledger; these are separate findings.
+- `persist_results` control flow, `cmd_restart` try/finally extent.
+- Twenty-three recording tests plus five new whole-command-flow tests.
+
+**Found**
+- All three confirmed and fixed.
+  1. A partial write raised immediately, abandoning the complete payload that
+     was intact in memory beside a working ledger. The commit is now always
+     attempted, from memory, whatever the file did; the partial file is kept for
+     inspection and the message says whether the run survives in the chain.
+  2. A target appearing after the preflight now diverts to a unique recovery
+     path instead of failing.
+  3. `cmd_restart`'s finally covered only persistence; a missing `--tol`, a
+     declaration-read failure and a subprocess failure each leaked an open
+     ledger. It now spans the whole orchestration.
+- **The new command-flow test found a fourth defect my fix had missed.** I had
+  handled the collision at the `os.link` step but not at `persist_results`'
+  opening `os.path.exists(out_path)` check — which is the one that actually
+  fires when the file appears mid-battery. It refused before writing a byte, and
+  the measurement was lost. `persist_results` no longer refuses over any
+  existing file: refusing after a measurement is data loss wearing the costume
+  of caution, and refusing early is the caller's job.
+- Test 18 in the recording suite had encoded that wrong contract — it asserted
+  the refusal. Corrected to assert diversion, with both measurements intact.
+
+**Failed**
+- Fixing finding 2 by patching only the `link` path, while the earlier
+  `os.path.exists` guard sat eleven lines above doing the damage, is the same
+  instance-not-class error for the fifth time this session.
+- One of my own tests was asserting the defective behaviour, so the suite would
+  have defended the bug against a correct fix.
+- Josh's instruction to test the complete command flow is what surfaced it. The
+  recording-function tests could not: the defect was in the order the command
+  does things, not in the recording.
+- Twenty-eight tests, all faked ledger and faked model.
+- No battery has run. Nothing established about state retention.
+
+**Would kill it**
+- A sixth defect of this shape would mean reviewing my own changes is not
+  catching them and every change should go to Josh's review before I claim it
+  is done, rather than after I claim it.

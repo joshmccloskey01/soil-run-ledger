@@ -837,26 +837,42 @@ def persist_declaration(decl, decl_path, led, _link=None):
     return ev
 
 
+def _unique_recovery_path(out_path):
+    """A path nothing else can be holding, for a collision discovered too late."""
+    base = out_path + f".recovered-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{os.getpid()}"
+    for n in range(100):
+        cand = base + ("" if n == 0 else f"-{n}") + ".json"
+        if not os.path.exists(cand):
+            return cand
+    return base + f"-{time.time_ns()}.json"
+
+
 def persist_results(payload, out_path, led, event_type, kind, _link=None):
     """
-    Record a MEASUREMENT. Deliberately a different failure policy from
-    persist_declaration, and the difference is the point.
+    Record a MEASUREMENT. Failure policy is deliberately the inverse of
+    persist_declaration's, and every branch here exists because losing a
+    measurement is worse than any bookkeeping problem it could protect.
 
-    A declaration must not exist uncommitted -- it is a precommitment, and an
-    uncommitted one is a claim that can still be changed. So there, a failed
-    commit deletes the pending file.
+    A declaration must not exist uncommitted, so a failed commit deletes it.
+    A result already happened -- the model was loaded and the gates ran -- so
+    nothing here deletes anything, and every path still tries both places the
+    data can live: the chain and the filesystem.
 
-    A result is the opposite. The measurement already happened; the model was
-    loaded and the gates were run. Throwing the data away because the chain
-    refused it would destroy evidence to protect bookkeeping. So here, a failed
-    commit still PUBLISHES the results and says loudly that they are
-    uncommitted.
+    Three failures are handled independently rather than short-circuiting:
+
+    WRITE FAILED, BYTES INTACT   warn, keep going; fsync runs after write and
+                                 flush, so this is a durability doubt, not loss.
+    WRITE FAILED, BYTES WRONG    keep the partial file for inspection AND still
+                                 commit the complete in-memory payload. An
+                                 earlier version raised immediately, abandoning
+                                 a good payload next to a working ledger.
+    PUBLISH COLLIDED             something took out_path after the preflight.
+                                 Save to a unique recovery path rather than
+                                 failing: the preflight cannot hold a
+                                 reservation across the whole battery.
 
     Floats: canon/1 is RFC 8785 minus IEEE-754 floats, and every D, spread and
-    margin is a float. The previous code committed the results dict directly,
-    which raises CanonRejected -- and because the commit came before the file
-    write, the measurements were lost outright. Committed as serialized text
-    plus its byte hash, exactly as the declaration is.
+    margin is one. Committed as serialized text plus its byte hash.
     """
     link = _link or os.link
     blob = json.dumps(payload, indent=2, sort_keys=True) + "\n"
@@ -864,64 +880,85 @@ def persist_results(payload, out_path, led, event_type, kind, _link=None):
     blob_sha = hashlib.sha256(blob_bytes).hexdigest()
     pending = out_path + ".pending"
 
+    # NOTHING here refuses over an existing file. By the time this runs the
+    # measurement has already been taken, and refusing would destroy it -- which
+    # is exactly what happened when the target appeared after cmd_run's
+    # preflight: persist_results raised before writing a single byte.
+    # Refusing early, before the model loads, is the caller's job. Refusing here
+    # is data loss wearing the costume of caution.
     if os.path.exists(out_path):
-        raise SystemExit(
-            f"REFUSING: {out_path} already exists. Overwriting a recorded result "
-            f"destroys a measurement. Move it aside deliberately, or use --out."
-        )
+        diverted = _unique_recovery_path(out_path)
+        print(f"WARNING: {out_path} was taken after the preflight. These results "
+              f"go to {diverted} instead. Nothing is overwritten and nothing is lost.")
+        out_path, pending = diverted, diverted + ".pending"
     if os.path.exists(pending):
-        raise SystemExit(
-            f"REFUSING: {pending} already exists, left by a previous run. Its "
-            f"commitment status is UNKNOWN. Inspect and remove it deliberately."
-        )
+        pending = _unique_recovery_path(out_path) + ".pending"
 
-    fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    # ---- 1. write, never deleting whatever lands on disk -------------------
+    file_ok, write_error = True, None
     try:
+        fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
         with os.fdopen(fd, "wb") as f:
             f.write(blob_bytes)
             f.flush()
             os.fsync(f.fileno())
     except Exception as e:
-        # DO NOT delete. This function's premise is that a measurement already
-        # happened, so data outranks bookkeeping -- and the previous version
-        # copied persist_declaration's delete-on-failure policy here, which
-        # destroyed the measurement on an fsync failure. fsync runs after write
-        # and flush, so the bytes are usually present and merely not durable;
-        # deleting them trades a durability doubt for certain loss.
+        write_error = e
         try:
             on_disk = open(pending, "rb").read()
         except OSError:
             on_disk = None
-        if on_disk != blob_bytes:
-            raise SystemExit(
-                f"RESULTS INCOMPLETE: writing to {pending} raised {e!r} and the "
-                f"file does not match the measured results. It has been KEPT for "
-                f"inspection but must not be treated as the measurement. The "
-                f"battery ran; its output was not durably captured."
-            )
-        print(f"WARNING: writing results raised {e!r}, but {pending} matches the "
-              f"measured bytes exactly. It has NOT been deleted. Durability is "
-              f"not guaranteed; the data is present. Continuing.")
+        file_ok = (on_disk == blob_bytes)
 
+    # ---- 2. commit ALWAYS, from memory, whatever the file did --------------
+    # The payload is intact in memory and the ledger is a separate mechanism.
     ev, commit_error = None, None
     try:
         ev = led.commit(event_type, {
             "kind": kind,
             "results_json": blob,
             "results_json_sha256": blob_sha,
+            "file_intact": "yes" if file_ok else "no",
         })
     except Exception as e:
         commit_error = repr(e)
 
-    # Publish regardless: the measurement is real whether or not the chain took it.
-    try:
-        link(pending, out_path)
-        os.unlink(pending)
-        published = out_path
-    except Exception as e:
-        published = pending
-        print(f"WARNING: could not publish to {out_path} ({e!r}); the results are "
-              f"at {pending} (sha256 {blob_sha}).")
+    # ---- 3. publish, falling back to a unique path on a late collision -----
+    published, publish_error = pending, None
+    if file_ok:
+        try:
+            link(pending, out_path)
+            os.unlink(pending)
+            published = out_path
+        except Exception as e:
+            publish_error = e
+            recovered = _unique_recovery_path(out_path)
+            try:
+                link(pending, recovered)
+                os.unlink(pending)
+                published = recovered
+                print(f"WARNING: {out_path} was taken after the preflight ({e!r}). "
+                      f"The results were saved to {published} instead. Nothing is "
+                      f"lost and nothing was overwritten.")
+            except Exception as e2:
+                print(f"WARNING: could not publish to {out_path} ({e!r}) or to a "
+                      f"recovery path ({e2!r}). The results remain at {pending}.")
+
+    # ---- 4. report, distinguishing every combination -----------------------
+    if not file_ok:
+        raise SystemExit(
+            f"RESULTS FILE INCOMPLETE: writing to {pending} raised {write_error!r} "
+            f"and the file does not match the measurement. It has been KEPT for "
+            f"inspection but is NOT the measurement.\n"
+            + (f"The complete results ARE in the chain as event {ev} "
+               f"(sha256 {blob_sha}), so the run is not lost -- recover it from "
+               f"there, not from the partial file.\n"
+               if ev is not None else
+               f"The ledger ALSO did not accept them"
+               + (f": {commit_error}\n" if commit_error else " (no event id).\n")
+               + f"THE MEASUREMENT IS LOST. Record that; do not re-run the battery "
+                 f"to 'replace' it, since a second run is a second measurement.\n")
+        )
 
     if ev is None:
         raise SystemExit(
@@ -932,6 +969,10 @@ def persist_results(payload, out_path, led, event_type, kind, _link=None):
             + "\nThe run stands; its recording does not. Do not re-run the battery "
               "to 'fix' this -- that would be a second measurement, not a repair."
         )
+
+    if write_error is not None:
+        print(f"NOTE: writing raised {write_error!r} but the bytes matched exactly; "
+              f"durability is not guaranteed, the data is present.")
     return ev, blob_sha, published
 
 
@@ -1058,58 +1099,62 @@ def cmd_run(args):
 
 def cmd_restart(args):
     """Two real processes. Parent orchestrates; children do the work."""
-    if args.phase is None:
-        if not args.ledger:
-            print("REFUSING: --ledger is required for restart.")
-            return 3
-        led = Ledger(args.ledger)
-        if not led.ok:
-            print(f"REFUSING: ledger unavailable ({led.reason}). No measurement "
-                  f"was taken.")
-            return 3
+    # Child phases touch no ledger and record nothing.
+    if args.phase in ("save", "load"):
+        decl = json.loads(Path(args.decl).read_text())
+        eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
+                     decl["runtime"]["n_batch"], decl["runtime"]["seed"])
+        fn = run_restart_save if args.phase == "save" else run_restart_load
+        print(json.dumps(fn(eng, decl, args.state_file)))
+        return 0
+
+    if not args.ledger:
+        print("REFUSING: --ledger is required for restart.")
+        return 3
+    led = Ledger(args.ledger)
+    if not led.ok:
+        print(f"REFUSING: ledger unavailable ({led.reason}). No measurement was taken.")
+        return 3
+
+    # Everything below is inside try/finally. Previously the finally covered
+    # only persistence, so a missing --tol, a declaration-read failure or a
+    # subprocess failure each left the ledger open.
+    try:
         for _p in (args.out, args.out + ".pending"):
             if os.path.exists(_p):
-                led.close()
                 print(f"REFUSING: {_p} already exists. No measurement was taken.")
                 return 3
-    decl = json.loads(Path(args.decl).read_text())
-    if args.phase == "save":
-        eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
-                     decl["runtime"]["n_batch"], decl["runtime"]["seed"])
-        print(json.dumps(run_restart_save(eng, decl, args.state_file)))
-        return 0
-    if args.phase == "load":
-        eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
-                     decl["runtime"]["n_batch"], decl["runtime"]["seed"])
-        print(json.dumps(run_restart_load(eng, decl, args.state_file)))
-        return 0
 
-    # orchestrate
-    tol = args.tol
-    if tol is None:
-        print("REFUSING: --tol is required and must come from the jitter calibration.")
-        print("A tolerance chosen after seeing the restart result is selection, not a test.")
-        return 2
+        tol = args.tol
+        if tol is None:
+            print("REFUSING: --tol is required and must come from the jitter calibration.")
+            print("A tolerance chosen after seeing the restart result is selection, not a test.")
+            return 2
 
-    base = [sys.executable, __file__, "restart", "--model", args.model,
-            "--decl", args.decl, "--state-file", args.state_file]
-    s = json.loads(subprocess.run(base + ["--phase", "save"],
-                                  capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1])
-    l = json.loads(subprocess.run(base + ["--phase", "load"],
-                                  capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1])
+        decl = json.loads(Path(args.decl).read_text())
 
-    delta = abs(s["D_live"] - l["D_restored"])
-    passed = delta <= tol
-    res = {"D_live": s["D_live"], "D_restored": l["D_restored"], "delta": delta,
-           "tol": tol, "state_bytes": s["state_bytes"], "pass": passed,
-           "declaration_sha256": decl["declaration_sha256"], "run_utc": _utc()}
-    print(f"[{'PASS' if passed else 'FAIL'}] restart: " + json.dumps(res))
+        base = [sys.executable, __file__, "restart", "--model", args.model,
+                "--decl", args.decl, "--state-file", args.state_file]
+        s_out = json.loads(subprocess.run(base + ["--phase", "save"],
+                                          capture_output=True, text=True,
+                                          check=True).stdout.strip().splitlines()[-1])
+        l_out = json.loads(subprocess.run(base + ["--phase", "load"],
+                                          capture_output=True, text=True,
+                                          check=True).stdout.strip().splitlines()[-1])
 
-    try:
+        delta = abs(s_out["D_live"] - l_out["D_restored"])
+        passed = delta <= tol
+        res = {"D_live": s_out["D_live"], "D_restored": l_out["D_restored"],
+               "delta": delta, "tol": tol, "state_bytes": s_out["state_bytes"],
+               "pass": passed, "declaration_sha256": decl["declaration_sha256"],
+               "run_utc": _utc()}
+        print(f"[{'PASS' if passed else 'FAIL'}] restart: " + json.dumps(res))
+
         ev, sha, published = persist_results(
             res, args.out, led, "observation", "state_probe_restart")
     finally:
         led.close()
+
     print(f"results: {published}")
     print(f"sha256:  {sha}")
     print(f"ledger:  committed {ev}")

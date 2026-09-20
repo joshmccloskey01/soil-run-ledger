@@ -262,16 +262,17 @@ assert os.path.exists(out), "MEASUREMENTS WERE LOST - this is the bug being fixe
 assert json.loads(open(out).read()) == RES, "published results must be the real ones"
 print("--- 17 ledger rejects results     -> results PUBLISHED anyway, loudly uncommitted")
 
-# 18 -- never overwrite a recorded measurement
+# 18 -- an existing output must be neither overwritten NOR a cause of data loss.
+# This previously asserted a refusal. That was wrong: by the time persist_results
+# runs the measurement exists, and refusing destroys it. Refusing early is
+# cmd_run's job (test 22); here the correct behaviour is to divert.
 d = tempfile.mkdtemp(); out = os.path.join(d, "results.json")
 open(out, "w").write("AN EARLIER MEASUREMENT")
-try:
-    m.persist_results(RES, out, FakeLedger("ok"), "observation", "k")
-    raise AssertionError("should have refused")
-except SystemExit as e:
-    assert "already exists" in str(e)
+ev, sha, published = m.persist_results(RES, out, FakeLedger("ok"), "observation", "k")
 assert open(out).read() == "AN EARLIER MEASUREMENT", "an earlier measurement was destroyed"
-print("--- 18 existing results.json      -> refused, earlier measurement intact")
+assert published != out and os.path.exists(published), "new measurement was lost"
+assert json.loads(open(published).read()) == RES
+print("--- 18 existing results.json      -> diverted, both measurements intact")
 
 # 19 -- run/restart refuse before spending a measurement
 m.Ledger = fake_ledger_ctor
