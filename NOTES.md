@@ -642,3 +642,59 @@ not edits to it.
   lost, the candidates become different tokens and the gate will refuse — which
   would be a file-integrity failure, not a probe failure, and must be recorded
   as such.
+
+## 2026-09-20 — declaration path reordered; failure paths tested before review
+
+**Checked**
+- Probe file `880f9fd1...f854` verified independently: reconstructed from Josh's
+  paste and hashed to the same digest; round-trips byte-identical through
+  `json.dumps(indent=2, sort_keys=True)`; 775 bytes, LF only, one trailing
+  newline; all eight leading spaces intact; `state_A`/`state_B` byte-identical
+  to the frozen design; `load_probes` accepts it.
+- `cmd_declare` ordering in the previous revision: `declaration.json` was
+  written before `Ledger(...)` was even constructed.
+- Six failure paths executed, no model loaded, ledger faked
+  (`test_persist_declaration.py`).
+
+**Found**
+- The ledger binding had never executed once. The earlier attempt died at the
+  alignment gate, which precedes it. So `create_ledger`, the genesis import and
+  the chain write were all unexercised, and about to run for the first time.
+- Reordered: ledger constructed and checked FIRST, before the model loads;
+  `--ledger` now refused if absent; declaration written to a `.pending` file and
+  fsynced, then the FULL declaration body committed to the chain, then published
+  by atomic rename.
+- Committing the full body rather than only the hashes makes the chain by itself
+  sufficient to recover a declaration, which is what closes Josh's requirement
+  that a commit-then-write-failure stay recoverable.
+- Tested: happy path publishes and clears `.pending`; commit raising and commit
+  returning None both remove `.pending`, write nothing and refuse; rename failing
+  after commit preserves `.pending`, reports the event id, prints the `mv`
+  recovery command and warns against re-running declare; both `cmd_declare`
+  refusals exit 3 without writing anything and without loading the model.
+- Measurement functions, thresholds, gates and probes verified unchanged against
+  `3e18e8d` after the edit.
+
+**Failed**
+- This bug was mine and it was the worst kind available in this project: an
+  apparatus that produces an uncommitted declaration while exiting 0. The whole
+  point of the precommitment is that the claim cannot be altered after the
+  measurement, and the previous ordering silently permitted exactly that. It
+  survived my own review of the revision two entries ago; I found it only when
+  reading the declare path a third time.
+- `--ledger` defaulting to `None` meant a mistyped or omitted flag produced the
+  same silent outcome. That default was mine as well.
+- The `.pending` path and atomic rename are tested against a faked ledger only.
+  The real `genesis`/`storage`/`append` binding still has never run, so a
+  first-contact failure there remains possible — it would now refuse rather than
+  exit 0, which is the point, but it is untested against the real ledger core.
+- No declaration exists. No gate has run. Nothing is established about state
+  retention.
+
+**Would kill it**
+- The real ledger core failing at `create_ledger` or import would now produce
+  exit 3 with a reason, and that reason is the next thing to diagnose. It would
+  be a ledger-binding finding, not a probe or state-retention result.
+- A `COMMITTED BUT NOT PUBLISHED` outcome would mean the chain holds a
+  declaration the filesystem does not; the recovery is the printed `mv`, and
+  re-running declare would wrongly commit a second declaration.

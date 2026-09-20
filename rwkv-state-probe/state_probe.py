@@ -664,7 +664,100 @@ def run_restart_load(eng, decl, state_file):
 
 # ---------------------------------------------------------------- cli
 
+def persist_declaration(decl, decl_path, led, _rename=None):
+    """
+    Order of operations, and why.
+
+    The previous revision wrote declaration.json FIRST, then constructed the
+    Ledger, then committed -- and Ledger swallows every failure into ok=False,
+    so `declare` exited 0 with a declaration on disk and nothing in the chain.
+    An uncommitted declaration is precisely what the precommitment exists to
+    prevent: a claim that can still be changed before the measurement.
+
+    Reversing it naively creates the opposite hazard -- the chain commits and
+    then the file write fails, leaving a commitment with no local record. So:
+
+      1. write the declaration to a .pending file and fsync it (durable, but
+         NOT at the declaration path, so nothing can mistake it for one)
+      2. commit the FULL declaration body to the chain, not just its hashes,
+         so the chain alone is sufficient to recover it
+      3. publish by atomic rename
+
+    Failure at 1  -> nothing committed, nothing written.
+    Failure at 2  -> .pending removed, nothing in the chain, refuse.
+    Failure at 3  -> chain HAS it and .pending HAS it: recoverable twice over,
+                     and the recovery instruction is printed rather than left
+                     for someone to work out.
+    """
+    rename = _rename or os.replace
+    blob = json.dumps(decl, indent=2, sort_keys=True) + "\n"
+    pending = decl_path + ".pending"
+
+    with open(pending, "w") as f:
+        f.write(blob)
+        f.flush()
+        os.fsync(f.fileno())
+
+    try:
+        ev = led.commit("measurement_commitment", {
+            "kind": "state_probe_declaration",
+            "declaration_sha256": decl["declaration_sha256"],
+            "model_sha256": decl["model_sha256"],
+            "probe_file_sha256": decl["probe_file_sha256"],
+            "probe_set_id": decl["probe_set_id"],
+            "declared_utc": decl["declared_utc"],
+            # full body: the chain is sufficient to recover the declaration
+            # even if every local file is lost
+            "declaration": decl,
+        })
+    except Exception as e:
+        try:
+            os.remove(pending)
+        except OSError:
+            pass
+        raise SystemExit(
+            f"REFUSING: ledger commit failed ({e!r}). No declaration was written "
+            f"and nothing is in the chain. This is not a probe or gate result."
+        )
+
+    if ev is None:
+        try:
+            os.remove(pending)
+        except OSError:
+            pass
+        raise SystemExit(
+            "REFUSING: ledger commit returned no event id. No declaration was "
+            "written and nothing is in the chain."
+        )
+
+    try:
+        rename(pending, decl_path)
+    except Exception as e:
+        raise SystemExit(
+            f"COMMITTED BUT NOT PUBLISHED: the declaration IS in the chain as "
+            f"event {ev}, but publishing it to {decl_path} failed ({e!r}).\n"
+            f"Nothing is lost. The exact bytes are at {pending}, and the full "
+            f"declaration body is inside the ledger event.\n"
+            f"Recover with:  mv {pending!r} {decl_path!r}\n"
+            f"Do NOT re-run declare -- that would commit a second declaration."
+        )
+    return ev
+
+
 def cmd_declare(args):
+    # Ledger FIRST. A declaration that cannot be committed must not be built,
+    # and a ledger problem should surface before a seven-second model load.
+    if not args.ledger:
+        print("REFUSING: --ledger is required for declare. Without it the "
+              "declaration would be written but never committed to the chain, "
+              "which defeats the precommitment entirely.")
+        return 3
+    led = Ledger(args.ledger)
+    if not led.ok:
+        print(f"REFUSING: ledger unavailable ({led.reason}). Nothing was written "
+              f"and nothing is in the chain. Fix the ledger path, then declare.")
+        return 3
+
     eng = Engine(args.model, args.n_ctx, args.threads, args.n_batch, args.seed)
     rec, arch = eng.arch_is_recurrent()
     if rec is False:
@@ -674,25 +767,18 @@ def cmd_declare(args):
         return 2
     probe_data, probe_sha = load_probes(args.probes)
     decl = build_declaration(eng, args, probe_data, probe_sha)
-    Path(args.decl).write_text(json.dumps(decl, indent=2, sort_keys=True))
 
-    led = Ledger(args.ledger)
-    ev = led.commit("measurement_commitment", {
-        "kind": "state_probe_declaration",
-        "declaration_sha256": decl["declaration_sha256"],
-        "model_sha256": decl["model_sha256"],
-        "probe_file_sha256": decl["probe_file_sha256"],
-        "probe_set_id": decl["probe_set_id"],
-        "declared_utc": decl["declared_utc"],
-    })
-    led.close()
+    try:
+        ev = persist_declaration(decl, args.decl, led)
+    finally:
+        led.close()
 
     print(f"declaration written: {args.decl}")
     print(f"declaration_sha256:  {decl['declaration_sha256']}")
     print(f"probe_set_id:        {decl['probe_set_id']}")
     print(f"probe_file_sha256:   {decl['probe_file_sha256']}")
     print(f"model arch:          {arch} (recurrent={rec})")
-    print(f"ledger:              {'committed ' + str(ev) if ev else 'NOT COMMITTED (' + led.reason + ')'}")
+    print(f"ledger:              committed {ev}")
     return 0
 
 
@@ -842,7 +928,7 @@ def main():
         p.add_argument("--model", required=True)
         p.add_argument("--decl", default="declaration.json")
         p.add_argument("--ledger", default=None,
-                       help="path to 'ledger core 2' dir; omit to run uncommitted")
+                       help="path to 'ledger core 2' dir; REQUIRED for declare")
 
     d = sub.add_parser("declare", help="freeze probes+thresholds into the ledger BEFORE running")
     common(d)
