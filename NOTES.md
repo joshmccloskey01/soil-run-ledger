@@ -896,3 +896,48 @@ not edits to it.
   measurement stands but its recording does not; the correct response is to
   record that fact, not to re-run the battery, since a second run is a second
   measurement rather than a repair.
+
+## 2026-09-20 (sixth entry) — three result-path defects, all carried over from a path I had already fixed
+
+**Checked**
+- Josh's review of `791362c` against a real temporary ledger. The serialization
+  fix passed; these are separate findings.
+- `persist_results` write block, `cmd_run` try/finally extent, and when the
+  output-path check actually runs.
+- Twenty-three failure paths executed, no model, faked ledger.
+
+**Found**
+- All three confirmed and fixed.
+  1. `persist_results` deleted the pending file on a write or fsync failure. It
+     had copied `persist_declaration`'s policy — the exact policy whose inversion
+     I had written a docstring about in the same function. fsync runs after write
+     and flush, so the bytes are normally present and merely not durable, and
+     deleting them traded a durability doubt for certain loss. Now the file is
+     kept; if its bytes match the measurement the run continues with a warning,
+     and if they do not it is kept for inspection and explicitly refused as the
+     measurement.
+  2. The output-path check lived in `persist_results`, which is called last. The
+     battery would run every gate and only then discover it had nowhere to save.
+     Now checked alongside the ledger, before the model loads.
+  3. `cmd_run`'s try/finally began after the gates, so a declaration-read failure,
+     a model-load failure or a gate raising all leaked an open ledger. It now
+     spans the whole path.
+
+**Failed**
+- Every one of these is a lesson I had already applied to `cmd_declare` and did
+  not carry across when I wrote `cmd_run` — including the delete-on-failure
+  policy, which I inverted in prose and then implemented the wrong way round
+  twelve lines later. Writing the correct rationale is evidently not the same as
+  applying it.
+- The pattern across this whole session is now unmistakable: I fix an instance,
+  state the class, and then reproduce the class somewhere adjacent. This is the
+  fourth time. Josh has found every one of them by testing, not by reading.
+- Twenty-three tests, all faked ledger.
+- No battery has run. No gate has produced a number. Nothing is established
+  about state retention.
+
+**Would kill it**
+- Another defect of the same shape in `cmd_restart` or anywhere else recording
+  data would mean per-instance fixing has failed as a method here, and the
+  recording paths should be collapsed into one audited implementation rather
+  than two parallel ones kept in sync by hand.

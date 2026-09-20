@@ -882,10 +882,26 @@ def persist_results(payload, out_path, led, event_type, kind, _link=None):
             f.flush()
             os.fsync(f.fileno())
     except Exception as e:
-        note = _discard_pending(pending)
-        raise SystemExit(
-            f"REFUSING: could not write results ({e!r})." + (note or " No file remains.")
-        )
+        # DO NOT delete. This function's premise is that a measurement already
+        # happened, so data outranks bookkeeping -- and the previous version
+        # copied persist_declaration's delete-on-failure policy here, which
+        # destroyed the measurement on an fsync failure. fsync runs after write
+        # and flush, so the bytes are usually present and merely not durable;
+        # deleting them trades a durability doubt for certain loss.
+        try:
+            on_disk = open(pending, "rb").read()
+        except OSError:
+            on_disk = None
+        if on_disk != blob_bytes:
+            raise SystemExit(
+                f"RESULTS INCOMPLETE: writing to {pending} raised {e!r} and the "
+                f"file does not match the measured results. It has been KEPT for "
+                f"inspection but must not be treated as the measurement. The "
+                f"battery ran; its output was not durably captured."
+            )
+        print(f"WARNING: writing results raised {e!r}, but {pending} matches the "
+              f"measured bytes exactly. It has NOT been deleted. Durability is "
+              f"not guaranteed; the data is present. Continuing.")
 
     ev, commit_error = None, None
     try:
@@ -972,51 +988,66 @@ def cmd_run(args):
               f"taken. Fix the ledger path, then run.")
         return 3
 
-    decl = json.loads(Path(args.decl).read_text())
-    eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
-                 decl["runtime"]["n_batch"], decl["runtime"]["seed"])
+    # Output path checked NOW, not after the battery. persist_results refuses an
+    # existing file, but it is called last -- so the previous version ran every
+    # gate and only then discovered it had nowhere to save, losing a measurement
+    # that had just cost a full model load.
+    for _p in (args.out, args.out + ".pending"):
+        if os.path.exists(_p):
+            led.close()
+            print(f"REFUSING: {_p} already exists. No measurement was taken. Move "
+                  f"it aside deliberately, or pass a different --out.")
+            return 3
 
-    live_hash = sha256_file(args.model)
-    if live_hash != decl["model_sha256"]:
-        print("REFUSING: model file does not match the declaration.")
-        return 2
-
-    results = {"declaration_sha256": decl["declaration_sha256"], "run_utc": _utc()}
-    spread = None
-    order = ["jitter", "floor", "causality", "specificity"]
-    gate_failed = None
-
-    for name in order:
-        if name == "jitter":
-            r = run_jitter(eng, decl)
-            r["pass"] = True  # calibration, not a gate -- it cannot fail
-            spread = r["spread_range"]
-        elif name == "floor":
-            r = run_floor(eng, decl, spread)
-        elif name == "causality":
-            r = run_causality(eng, decl, spread)
-        else:
-            r = run_specificity(eng, decl)
-        results[name] = r
-        verdict = "PASS" if r.get("pass") else "FAIL"
-        print(f"[{verdict}] {name}: " + json.dumps(
-            {k: (round(v, 5) if isinstance(v, float) else v)
-             for k, v in r.items() if k != "values"}))
-        if not r.get("pass"):
-            gate_failed = name
-            break
-
-    if gate_failed:
-        print(f"\nSTOPPED at {gate_failed}. Later gates are not meaningful once an "
-              f"earlier one fails. This is a recorded result, not a tuning prompt:")
-        print("changing a probe now requires a NEW declaration, forward-only.")
-
+    # Everything below is inside try/finally. Reading the declaration, loading
+    # the model and running the gates can each raise, and every one of them
+    # previously leaked an open ledger handle.
     try:
+        decl = json.loads(Path(args.decl).read_text())
+        eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
+                     decl["runtime"]["n_batch"], decl["runtime"]["seed"])
+
+        live_hash = sha256_file(args.model)
+        if live_hash != decl["model_sha256"]:
+            print("REFUSING: model file does not match the declaration.")
+            return 2
+
+        results = {"declaration_sha256": decl["declaration_sha256"], "run_utc": _utc()}
+        spread = None
+        order = ["jitter", "floor", "causality", "specificity"]
+        gate_failed = None
+
+        for name in order:
+            if name == "jitter":
+                r = run_jitter(eng, decl)
+                r["pass"] = True  # calibration, not a gate -- it cannot fail
+                spread = r["spread_range"]
+            elif name == "floor":
+                r = run_floor(eng, decl, spread)
+            elif name == "causality":
+                r = run_causality(eng, decl, spread)
+            else:
+                r = run_specificity(eng, decl)
+            results[name] = r
+            verdict = "PASS" if r.get("pass") else "FAIL"
+            print(f"[{verdict}] {name}: " + json.dumps(
+                {k: (round(v, 5) if isinstance(v, float) else v)
+                 for k, v in r.items() if k != "values"}))
+            if not r.get("pass"):
+                gate_failed = name
+                break
+
+        if gate_failed:
+            print(f"\nSTOPPED at {gate_failed}. Later gates are not meaningful once an "
+                  f"earlier one fails. This is a recorded result, not a tuning prompt:")
+            print("changing a probe now requires a NEW declaration, forward-only.")
+
         ev, sha, published = persist_results(
             results, args.out, led, "observation", "state_probe_battery")
         chain = led.verify()
     finally:
         led.close()
+
     print(f"\nresults: {published}")
     print(f"sha256:  {sha}")
     print(f"ledger:  committed {ev}")
@@ -1036,6 +1067,11 @@ def cmd_restart(args):
             print(f"REFUSING: ledger unavailable ({led.reason}). No measurement "
                   f"was taken.")
             return 3
+        for _p in (args.out, args.out + ".pending"):
+            if os.path.exists(_p):
+                led.close()
+                print(f"REFUSING: {_p} already exists. No measurement was taken.")
+                return 3
     decl = json.loads(Path(args.decl).read_text())
     if args.phase == "save":
         eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],

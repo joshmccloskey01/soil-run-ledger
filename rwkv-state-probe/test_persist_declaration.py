@@ -286,4 +286,74 @@ finally:
 assert not os.path.exists("/tmp/nope_out.json")
 print("--- 19 run/restart without ledger -> exit 3 before any model load\n")
 
+print("=== results: write failure must not destroy the measurement ===\n")
+
+# 20 -- fsync fails but bytes are intact: KEEP the data and carry on
+d = tempfile.mkdtemp(); out = os.path.join(d, "results.json")
+led = FakeLedger("ok")
+m.os.fsync = lambda fd: (_ for _ in ()).throw(OSError("simulated fsync failure"))
+try:
+    ev, sha, published = m.persist_results(RES, out, led, "observation", "k")
+finally:
+    m.os.fsync = real_fsync
+assert os.path.exists(published), "MEASUREMENT DESTROYED by an fsync failure"
+assert json.loads(open(published).read()) == RES
+assert led.body is not None, "should still have committed"
+print("--- 20 fsync fails, bytes intact  -> results KEPT, committed, published")
+
+# 21 -- write produces wrong bytes: keep for inspection, refuse to call it the run
+d = tempfile.mkdtemp(); out = os.path.join(d, "results.json")
+real_fdopen = m.os.fdopen
+class TruncatingFile:
+    def __init__(self, f): self.f = f
+    def write(self, b): return self.f.write(b[:5])
+    def flush(self): self.f.flush()
+    def fileno(self): return self.f.fileno()
+    def __enter__(self): return self
+    def __exit__(self, *a): self.f.close(); return False
+m.os.fdopen = lambda fd, mode: TruncatingFile(real_fdopen(fd, mode))
+m.os.fsync = lambda fd: (_ for _ in ()).throw(OSError("simulated fsync failure"))
+try:
+    m.persist_results(RES, out, FakeLedger("ok"), "observation", "k")
+    raise AssertionError("should have refused")
+except SystemExit as e:
+    msg = str(e)
+finally:
+    m.os.fdopen, m.os.fsync = real_fdopen, real_fsync
+assert "RESULTS INCOMPLETE" in msg and "KEPT for inspection" in msg, msg
+assert os.path.exists(out + ".pending"), "corrupt file must be kept for forensics"
+print("--- 21 write corrupts the bytes   -> kept for inspection, refused as the measurement")
+
+# 22 -- an existing output file is refused BEFORE any measurement
+d = tempfile.mkdtemp(); out = os.path.join(d, "results.json")
+open(out, "w").write("AN EARLIER MEASUREMENT")
+m.Ledger = fake_ledger_ctor
+try:
+    a = argparse.Namespace(decl="/tmp/nope.json", ledger="/any", out=out,
+                           model="/nonexistent.gguf", probes="/tmp/pb.json",
+                           state_file="/tmp/s", tol=None, phase=None)
+    rc = m.cmd_run(a)
+finally:
+    m.Ledger = real_ledger
+assert rc == 3, f"expected refusal before measuring, got {rc}"
+assert open(out).read() == "AN EARLIER MEASUREMENT"
+print("--- 22 existing --out             -> refused BEFORE the model loads")
+
+# 23 -- ledger closed when the battery raises early
+m.Ledger = fake_ledger_ctor
+tracked.clear()
+try:
+    a = argparse.Namespace(decl="/tmp/definitely_missing.json", ledger="/any",
+                           out=os.path.join(tempfile.mkdtemp(), "r.json"),
+                           model="/nonexistent.gguf", probes="/tmp/pb.json",
+                           state_file="/tmp/s", tol=None, phase=None)
+    try:
+        m.cmd_run(a)
+    except Exception as e:
+        print(f"--- 23 declaration read raised: {type(e).__name__}")
+finally:
+    m.Ledger = real_ledger
+assert tracked and tracked[0].closed, "ledger left OPEN when run failed early"
+print("    ledger closed despite the early failure: True\n")
+
 print("ALL FAILURE PATHS BEHAVE AS SPECIFIED")
