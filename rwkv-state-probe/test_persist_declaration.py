@@ -321,9 +321,12 @@ except SystemExit as e:
     msg = str(e)
 finally:
     m.os.fdopen, m.os.fsync = real_fdopen, real_fsync
-assert "RESULTS INCOMPLETE" in msg and "KEPT for inspection" in msg, msg
+assert "RESULTS FILE INCOMPLETE" in msg and "KEPT for inspection" in msg, msg
+# The corrected contract: the partial file is kept AND the complete in-memory
+# payload is still committed, so the message must point at the chain.
+assert "ARE in the chain as event" in msg, "complete payload was abandoned: " + msg
 assert os.path.exists(out + ".pending"), "corrupt file must be kept for forensics"
-print("--- 21 write corrupts the bytes   -> kept for inspection, refused as the measurement")
+print("--- 21 write corrupts the bytes   -> kept for inspection, complete payload committed")
 
 # 22 -- an existing output file is refused BEFORE any measurement
 d = tempfile.mkdtemp(); out = os.path.join(d, "results.json")
