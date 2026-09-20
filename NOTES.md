@@ -844,3 +844,55 @@ not edits to it.
 - Another message asserting an unchecked state would mean this class is not
   fixed by patching instances, and every operator-facing message needs auditing
   against what the code verifies rather than what it attempts.
+
+## 2026-09-20 (fifth entry) — DECLARATION COMMITTED; result recording had the same float defect
+
+**Checked**
+- Josh ran `declare` from `f7f2f25` against the real ledger. The declaration is
+  committed and verified: saved file matches the ledger event byte-for-byte, all
+  four alignment checks passed, chain verifies. **This is the first real-ledger
+  write of the project and the precommitment now exists.**
+- His serialization-only preflight of `run`, which reproduced a canon rejection.
+- `cmd_run` and `cmd_restart` recording tails, read directly.
+- Twenty failure paths executed, no model, faked ledger.
+
+**Found**
+- Confirmed, and worse than reported in one respect. `cmd_run` did
+  `led.commit(... "results": json.loads(json.dumps(results)) ...)` — a dict whose
+  every D, spread and margin is a float — and the file write came *after*. So
+  canon/1 raises, the exception propagates, and `results.json` is never written:
+  **a full model load and every gate, lost outright.** `cmd_restart` has the
+  same shape. Neither checked `led.ok` nor closed the ledger.
+- Fixed with `persist_results`, which deliberately has the OPPOSITE failure
+  policy from `persist_declaration`, and the difference is the point: a
+  declaration must not exist uncommitted, so a failed commit deletes it; a
+  measurement already happened, so a failed commit still publishes it and says
+  loudly that it is uncommitted. Discarding data to protect bookkeeping would be
+  the wrong trade.
+- Ledger is now checked before the model loads in `run` and `restart`, so a
+  ledger problem cannot be discovered after the measurement has been spent.
+- Results commit as serialized text plus byte hash, as the declaration does.
+
+**Failed**
+- This is the same canon/1 float defect I fixed in the declaration path, still
+  sitting in the results path, in the same file. I fixed the instance and not
+  the class, which is exactly what my own note two entries ago said to do if it
+  recurred.
+- Worse: my standing verification was "measurement/thresholds/gates unchanged
+  vs 3e18e8d", which I ran and reported on every single revision. It confirmed I
+  had not broken the measurement functions while the recording path wrapped
+  around them carried the identical bug I was fixing elsewhere. The check gave
+  false comfort about the code immediately adjacent to what it measured.
+- Found by Josh's preflight, not by me. Every real-ledger defect this session has
+  been found that way.
+- Twenty tests, all faked ledger. The real-ledger float rejection is still
+  something my fakes cannot reproduce.
+
+**Would kill it**
+- A canon rejection on any other field of either event body would mean the class
+  is still not closed and every committed payload needs auditing against canon/1
+  rather than fixing on rejection.
+- `RESULTS NOT COMMITTED` appearing after a real battery would mean the
+  measurement stands but its recording does not; the correct response is to
+  record that fact, not to re-run the battery, since a second run is a second
+  measurement rather than a repair.

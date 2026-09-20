@@ -229,4 +229,61 @@ try:
 finally:
     m.Ledger = real_ledger
 print()
+print("=== persist_results: measurements must never be lost ===\n")
+
+# Realistic battery output: every D, spread and margin is a float.
+RES = {"jitter": {"spread_range": 0.0, "spread_stdev": 0.0, "n": 20},
+       "floor": {"D_with_state": 4.21, "D_fresh": -1.03, "delta": 5.24,
+                 "required_margin": 0.5, "pass": True},
+       "gate_failed": None}
+
+# 16 -- floats commit as TEXT and the file is published
+d = tempfile.mkdtemp(); out = os.path.join(d, "results.json")
+led = FakeLedger("ok")
+ev, sha, published = m.persist_results(RES, out, led, "observation", "state_probe_battery")
+body = led.body
+assert "results" not in body and isinstance(body["results_json"], str)
+assert json.loads(body["results_json"]) == RES
+assert not has_float(body), "event body contains a float; canon/1 would reject it"
+assert has_float(RES), "fixture must contain floats for this to mean anything"
+assert published == out and os.path.exists(out) and not os.path.exists(out + ".pending")
+print("--- 16 float results              -> committed as TEXT, published, no float in event")
+
+# 17 -- commit rejected: results MUST survive, loudly uncommitted
+d = tempfile.mkdtemp(); out = os.path.join(d, "results.json")
+try:
+    m.persist_results(RES, out, FakeLedger("raise"), "observation", "k")
+    raise AssertionError("should have refused")
+except SystemExit as e:
+    msg = str(e)
+assert "RESULTS NOT COMMITTED" in msg and "are NOT lost" in msg, msg
+assert "Do not re-run the battery" in msg
+assert os.path.exists(out), "MEASUREMENTS WERE LOST - this is the bug being fixed"
+assert json.loads(open(out).read()) == RES, "published results must be the real ones"
+print("--- 17 ledger rejects results     -> results PUBLISHED anyway, loudly uncommitted")
+
+# 18 -- never overwrite a recorded measurement
+d = tempfile.mkdtemp(); out = os.path.join(d, "results.json")
+open(out, "w").write("AN EARLIER MEASUREMENT")
+try:
+    m.persist_results(RES, out, FakeLedger("ok"), "observation", "k")
+    raise AssertionError("should have refused")
+except SystemExit as e:
+    assert "already exists" in str(e)
+assert open(out).read() == "AN EARLIER MEASUREMENT", "an earlier measurement was destroyed"
+print("--- 18 existing results.json      -> refused, earlier measurement intact")
+
+# 19 -- run/restart refuse before spending a measurement
+m.Ledger = fake_ledger_ctor
+try:
+    a = argparse.Namespace(decl="/tmp/nope.json", ledger=None, out="/tmp/nope_out.json",
+                           model="/nonexistent.gguf", probes="/tmp/pb.json",
+                           state_file="/tmp/s", tol=None, phase=None)
+    assert m.cmd_run(a) == 3
+    assert m.cmd_restart(a) == 3
+finally:
+    m.Ledger = real_ledger
+assert not os.path.exists("/tmp/nope_out.json")
+print("--- 19 run/restart without ledger -> exit 3 before any model load\n")
+
 print("ALL FAILURE PATHS BEHAVE AS SPECIFIED")

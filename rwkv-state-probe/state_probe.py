@@ -837,6 +837,88 @@ def persist_declaration(decl, decl_path, led, _link=None):
     return ev
 
 
+def persist_results(payload, out_path, led, event_type, kind, _link=None):
+    """
+    Record a MEASUREMENT. Deliberately a different failure policy from
+    persist_declaration, and the difference is the point.
+
+    A declaration must not exist uncommitted -- it is a precommitment, and an
+    uncommitted one is a claim that can still be changed. So there, a failed
+    commit deletes the pending file.
+
+    A result is the opposite. The measurement already happened; the model was
+    loaded and the gates were run. Throwing the data away because the chain
+    refused it would destroy evidence to protect bookkeeping. So here, a failed
+    commit still PUBLISHES the results and says loudly that they are
+    uncommitted.
+
+    Floats: canon/1 is RFC 8785 minus IEEE-754 floats, and every D, spread and
+    margin is a float. The previous code committed the results dict directly,
+    which raises CanonRejected -- and because the commit came before the file
+    write, the measurements were lost outright. Committed as serialized text
+    plus its byte hash, exactly as the declaration is.
+    """
+    link = _link or os.link
+    blob = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    blob_bytes = blob.encode("utf-8")
+    blob_sha = hashlib.sha256(blob_bytes).hexdigest()
+    pending = out_path + ".pending"
+
+    if os.path.exists(out_path):
+        raise SystemExit(
+            f"REFUSING: {out_path} already exists. Overwriting a recorded result "
+            f"destroys a measurement. Move it aside deliberately, or use --out."
+        )
+    if os.path.exists(pending):
+        raise SystemExit(
+            f"REFUSING: {pending} already exists, left by a previous run. Its "
+            f"commitment status is UNKNOWN. Inspect and remove it deliberately."
+        )
+
+    fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(blob_bytes)
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception as e:
+        note = _discard_pending(pending)
+        raise SystemExit(
+            f"REFUSING: could not write results ({e!r})." + (note or " No file remains.")
+        )
+
+    ev, commit_error = None, None
+    try:
+        ev = led.commit(event_type, {
+            "kind": kind,
+            "results_json": blob,
+            "results_json_sha256": blob_sha,
+        })
+    except Exception as e:
+        commit_error = repr(e)
+
+    # Publish regardless: the measurement is real whether or not the chain took it.
+    try:
+        link(pending, out_path)
+        os.unlink(pending)
+        published = out_path
+    except Exception as e:
+        published = pending
+        print(f"WARNING: could not publish to {out_path} ({e!r}); the results are "
+              f"at {pending} (sha256 {blob_sha}).")
+
+    if ev is None:
+        raise SystemExit(
+            f"RESULTS NOT COMMITTED. The measurements are saved at {published} "
+            f"(sha256 {blob_sha}) and are NOT lost, but the ledger did not accept "
+            f"them"
+            + (f": {commit_error}" if commit_error else " (no event id returned).")
+            + "\nThe run stands; its recording does not. Do not re-run the battery "
+              "to 'fix' this -- that would be a second measurement, not a repair."
+        )
+    return ev, blob_sha, published
+
+
 def cmd_declare(args):
     # Ledger FIRST. A declaration that cannot be committed must not be built,
     # and a ledger problem should surface before a seven-second model load.
@@ -878,6 +960,18 @@ def cmd_declare(args):
 
 
 def cmd_run(args):
+    # Ledger FIRST, before the model loads and before a single gate runs. A
+    # ledger problem discovered after the battery costs the whole measurement.
+    if not args.ledger:
+        print("REFUSING: --ledger is required for run. Results that cannot be "
+              "committed should not be produced by accident.")
+        return 3
+    led = Ledger(args.ledger)
+    if not led.ok:
+        print(f"REFUSING: ledger unavailable ({led.reason}). No measurement was "
+              f"taken. Fix the ledger path, then run.")
+        return 3
+
     decl = json.loads(Path(args.decl).read_text())
     eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
                  decl["runtime"]["n_batch"], decl["runtime"]["seed"])
@@ -917,18 +1011,15 @@ def cmd_run(args):
               f"earlier one fails. This is a recorded result, not a tuning prompt:")
         print("changing a probe now requires a NEW declaration, forward-only.")
 
-    led = Ledger(args.ledger)
-    ev = led.commit("observation", {
-        "kind": "state_probe_battery",
-        "declaration_sha256": decl["declaration_sha256"],
-        "results": json.loads(json.dumps(results)),
-        "gate_failed": gate_failed,
-    })
-    chain = led.verify()
-    led.close()
-    Path(args.out).write_text(json.dumps(results, indent=2, sort_keys=True))
-    print(f"\nresults: {args.out}")
-    print(f"ledger:  {'committed ' + str(ev) if ev else 'NOT COMMITTED (' + led.reason + ')'}")
+    try:
+        ev, sha, published = persist_results(
+            results, args.out, led, "observation", "state_probe_battery")
+        chain = led.verify()
+    finally:
+        led.close()
+    print(f"\nresults: {published}")
+    print(f"sha256:  {sha}")
+    print(f"ledger:  committed {ev}")
     if chain is not None:
         print(f"chain:   {'clean' if chain == [] else chain}")
     return 0 if not gate_failed else 1
@@ -936,6 +1027,15 @@ def cmd_run(args):
 
 def cmd_restart(args):
     """Two real processes. Parent orchestrates; children do the work."""
+    if args.phase is None:
+        if not args.ledger:
+            print("REFUSING: --ledger is required for restart.")
+            return 3
+        led = Ledger(args.ledger)
+        if not led.ok:
+            print(f"REFUSING: ledger unavailable ({led.reason}). No measurement "
+                  f"was taken.")
+            return 3
     decl = json.loads(Path(args.decl).read_text())
     if args.phase == "save":
         eng = Engine(args.model, decl["runtime"]["n_ctx"], decl["runtime"]["n_threads"],
@@ -969,10 +1069,14 @@ def cmd_restart(args):
            "declaration_sha256": decl["declaration_sha256"], "run_utc": _utc()}
     print(f"[{'PASS' if passed else 'FAIL'}] restart: " + json.dumps(res))
 
-    led = Ledger(args.ledger)
-    ev = led.commit("observation", {"kind": "state_probe_restart", "results": res})
-    led.close()
-    print(f"ledger: {'committed ' + str(ev) if ev else 'NOT COMMITTED (' + led.reason + ')'}")
+    try:
+        ev, sha, published = persist_results(
+            res, args.out, led, "observation", "state_probe_restart")
+    finally:
+        led.close()
+    print(f"results: {published}")
+    print(f"sha256:  {sha}")
+    print(f"ledger:  committed {ev}")
     return 0 if passed else 1
 
 
@@ -1044,6 +1148,7 @@ def main():
     common(s)
     s.add_argument("--state-file", default="s2.state")
     s.add_argument("--tol", type=float, default=None)
+    s.add_argument("--out", default="restart_results.json")
     s.add_argument("--phase", choices=["save", "load"], default=None)
     s.set_defaults(fn=cmd_restart)
 
