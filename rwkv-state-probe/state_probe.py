@@ -714,18 +714,48 @@ def persist_declaration(decl, decl_path, led, _link=None):
             f"or declare to a different path."
         )
     if os.path.exists(pending):
+        try:
+            existing_sha = hashlib.sha256(open(pending, "rb").read()).hexdigest()
+        except OSError as e:
+            existing_sha = f"<unreadable: {e!r}>"
         raise SystemExit(
-            f"REFUSING: {pending} already exists. That is an unrecovered "
-            f"declaration from a previous run whose publication failed, and its "
-            f"commitment is already in the chain. Recover or remove it "
-            f"deliberately before declaring again."
+            f"REFUSING: {pending} already exists, left by a previous run.\n"
+            f"\n"
+            f"ITS COMMITMENT STATUS IS UNKNOWN. A .pending file can be left by a\n"
+            f"failure BEFORE the ledger commit as well as after it, and the two\n"
+            f"cases are indistinguishable from the file alone. Do not publish it\n"
+            f"and do not assume it is committed.\n"
+            f"\n"
+            f"Its sha256 is {existing_sha}\n"
+            f"\n"
+            f"Verify first: look for a ledger event whose declaration_json_sha256\n"
+            f"equals that value.\n"
+            f"  - found     -> it IS committed; publish it without overwriting:\n"
+            f"                 ln {pending!r} {decl_path!r} && rm {pending!r}\n"
+            f"  - not found -> it is NOT a commitment. Remove it deliberately and\n"
+            f"                 re-run declare.\n"
+            f"Either way, decide from the chain, not from the file's existence."
         )
 
     fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-    with os.fdopen(fd, "wb") as f:
-        f.write(blob_bytes)
-        f.flush()
-        os.fsync(f.fileno())
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(blob_bytes)
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception as e:
+        # Nothing has been committed yet, so this .pending proves nothing and
+        # must not survive: a leftover pre-commit .pending is indistinguishable
+        # from a post-commit one, and would be read as evidence of a commitment
+        # that does not exist.
+        try:
+            os.remove(pending)
+        except OSError:
+            pass
+        raise SystemExit(
+            f"REFUSING: could not write the pending declaration ({e!r}). Nothing "
+            f"was committed and no file remains. This is not a probe or gate result."
+        )
 
     try:
         ev = led.commit("measurement_commitment", {
@@ -764,14 +794,26 @@ def persist_declaration(decl, decl_path, led, _link=None):
     try:
         link(pending, decl_path)
     except Exception as e:
+        dest_exists = os.path.exists(decl_path)
         raise SystemExit(
             f"COMMITTED BUT NOT PUBLISHED: the declaration IS in the chain as "
             f"event {ev}, but publishing it to {decl_path} failed ({e!r}).\n"
             f"Nothing is lost. The exact bytes are at {pending} "
             f"(sha256 {blob_sha}), and the full declaration text is inside the "
             f"ledger event.\n"
-            f"Recover with:  mv {pending!r} {decl_path!r}\n"
-            f"Do NOT re-run declare -- that would commit a second declaration."
+            f"\n"
+            + (
+                f"THE DESTINATION ALREADY EXISTS. Do NOT move over it -- that "
+                f"file may be a different declaration that is itself committed.\n"
+                f"Compare its sha256 against {blob_sha} and against the chain "
+                f"before doing anything, then publish to a path that is free.\n"
+                if dest_exists else
+                f"Recover with a command that cannot overwrite:\n"
+                f"  ln {pending!r} {decl_path!r} && rm {pending!r}\n"
+                f"Do not use `mv`: it overwrites the destination silently, which "
+                f"is the failure this publication step refuses by design.\n"
+            )
+            + f"Do NOT re-run declare -- that would commit a second declaration."
         )
     try:
         os.unlink(pending)

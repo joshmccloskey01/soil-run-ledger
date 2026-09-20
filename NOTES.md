@@ -752,3 +752,54 @@ not edits to it.
 - `os.link` failing on the target filesystem would make publication unavailable
   as written; the failure is safe (commit stands, `.pending` preserved) but the
   mechanism would need replacing.
+
+## 2026-09-20 (third entry) — two recovery defects: overwriting mv, and pending-implies-committed
+
+**Checked**
+- Josh's real-ledger run of `1865aa2`: commitment, exact-byte recovery, hash
+  verification and chain verification all passed; all outer event fields are
+  strings. The normal commit-and-publish path works against the real ledger.
+- My own recovery text and the position of `fsync` relative to `led.commit`.
+- Fourteen failure paths executed, no model, faked ledger.
+
+**Found**
+- Both defects confirmed, and both are mine.
+  1. The `COMMITTED BUT NOT PUBLISHED` branch fires *because* `os.link` refused
+     an existing destination — and then printed `mv`, which overwrites. The
+     recovery instruction defeated the protection added in the same commit.
+     Josh executed it on temporary files and it destroyed the protected
+     destination. Now: when the destination is free the command is
+     `ln ... && rm ...` with an explicit warning against `mv`; when the
+     destination exists, no publish command is offered at all, only an
+     instruction to compare hashes against the chain first.
+  2. `fsync` runs before `led.commit`, so a failure there left `.pending` with
+     zero events — while my refusal text asserted "its commitment is already in
+     the chain". Two fixes: a pre-commit write or fsync failure now removes
+     `.pending` (it proves nothing and must not survive), and the refusal text
+     reports commitment status as UNKNOWN, prints the pending file's sha256, and
+     requires matching it against a ledger event's `declaration_json_sha256`
+     before any publication.
+
+**Failed**
+- Defect 1 is the sharpest self-inflicted error of the session: I added a
+  non-overwriting publish and, in the same function, told the operator to
+  overwrite. The protection and its defeat were written minutes apart.
+- Defect 2 is the same shape as the earlier `.pending` clobbering bug — I
+  reasoned about the recovery file only in the case I had in mind (failure
+  after commit) and asserted that case as fact in a message the operator would
+  act on. A file's existence was treated as evidence of a chain state.
+- Both were found by Josh executing the instructions rather than reading them.
+  My tests asserted that a recovery message was printed; none asserted that
+  following it was safe. That distinction is now tested.
+- Fourteen tests, all against a faked ledger. Every defect found against the
+  real ledger so far has been one my fakes could not reach.
+- No declaration. No gate has run. Nothing established about state retention.
+
+**Would kill it**
+- A `.pending` whose sha256 matches no ledger event would mean a pre-commit
+  failure left a file that looks like a commitment; the correct action is
+  deliberate removal, and the new text says so rather than inviting publication.
+- No tooling exists to perform that chain lookup — it is currently a manual
+  match on `declaration_json_sha256`. If that proves impractical in use, a
+  verify-pending command is the next thing to build, and it would need testing
+  against the real ledger rather than a fake.

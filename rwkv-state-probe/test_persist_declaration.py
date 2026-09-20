@@ -107,6 +107,64 @@ assert open(path).read() == "APPEARED DURING THE RUN", "destination was overwrit
 assert os.path.exists(path + ".pending"), "pending must survive for recovery"
 print("--- 9 destination appears mid-run -> link refuses, pending preserved\n")
 
+print("=== recovery defects ===\n")
+
+# 11 -- a pre-commit fsync failure must leave NO .pending, because a leftover
+# one is indistinguishable from a committed one and would be read as proof.
+d = tempfile.mkdtemp(); path = os.path.join(d, "declaration.json")
+led_unused = FakeLedger("ok")
+real_fsync = m.os.fsync
+m.os.fsync = lambda fd: (_ for _ in ()).throw(OSError("simulated fsync failure"))
+try:
+    m.persist_declaration(DECL, path, led_unused); raise AssertionError("should have refused")
+except SystemExit as e:
+    assert "Nothing was committed and no file remains" in str(e), str(e)
+finally:
+    m.os.fsync = real_fsync
+assert not os.path.exists(path + ".pending"), "pre-commit .pending must NOT survive"
+assert not os.path.exists(path)
+assert led_unused.body is None, "nothing should have been committed"
+print("--- 11 fsync fails before commit  -> no .pending, nothing committed")
+
+# 12 -- an existing .pending must NOT be described as committed
+d = tempfile.mkdtemp(); path = os.path.join(d, "declaration.json")
+open(path + ".pending", "wb").write(b"UNVERIFIED")
+expect_sha = _h.sha256(b"UNVERIFIED").hexdigest()
+try:
+    m.persist_declaration(DECL, path, FakeLedger("ok")); raise AssertionError("should have refused")
+except SystemExit as e:
+    msg = str(e)
+assert "COMMITMENT STATUS IS UNKNOWN" in msg, "must not assume commitment"
+assert "already in the chain" not in msg, "must not assert commitment"
+assert expect_sha in msg, "must print the pending file's hash so it can be matched"
+assert "ln " in msg and "Verify first" in msg, "must require verification before publishing"
+print("--- 12 existing .pending          -> commitment reported UNKNOWN, hash given")
+
+# 13 -- recovery instruction must not be a plain mv
+d = tempfile.mkdtemp(); path = os.path.join(d, "declaration.json")
+try:
+    m.persist_declaration(DECL, path, FakeLedger("ok"), _link=boom); raise AssertionError("should have refused")
+except SystemExit as e:
+    msg = str(e)
+assert "ln " in msg and "Do not use `mv`" in msg, "recovery must use a non-overwriting command"
+assert os.path.exists(path + ".pending")
+print("--- 13 publish fails, dest free   -> recovery uses ln, warns against mv")
+
+# 14 -- publish fails because the destination exists: never instruct moving over it
+d = tempfile.mkdtemp(); path = os.path.join(d, "declaration.json")
+def link_dest_exists(src, dst):
+    open(dst, "w").write("A DIFFERENT COMMITTED DECLARATION")
+    return os.link(src, dst)
+try:
+    m.persist_declaration(DECL, path, FakeLedger("ok"), _link=link_dest_exists)
+    raise AssertionError("should have refused")
+except SystemExit as e:
+    msg = str(e)
+assert "THE DESTINATION ALREADY EXISTS" in msg and "Do NOT move over it" in msg
+assert "ln " not in msg.split("THE DESTINATION")[1], "must not hand out a publish command here"
+assert open(path).read() == "A DIFFERENT COMMITTED DECLARATION", "destination was modified"
+print("--- 14 publish fails, dest exists -> refuses to instruct any overwrite\n")
+
 print("=== cmd_declare refusal paths (no model loaded) ===\n")
 def cd(ledger):
     a = argparse.Namespace(model="/nonexistent.gguf", decl="/tmp/should_not_exist.json",
