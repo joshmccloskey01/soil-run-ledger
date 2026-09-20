@@ -997,3 +997,63 @@ message, described the suites as verified. That is the plainest form of the
 defect this record keeps returning to: claiming a check passed without running
 it. Corrected in the following commit; both suites are green and I ran them
 before committing this time.
+
+## 2026-09-20 (eighth entry) — BATTERY PASSED. Apparatus qualified; thesis untouched.
+
+**Checked**
+- `run` executed from `c635111` against the real model and the real ledger,
+  using the declaration committed from `f7f2f25`. All four declared gates —
+  jitter, floor, causality, specificity — passed.
+- `restart` executed. D_live and D_restored were **exactly equal** at
+  6.815009117126465; delta 0.0 against a declared tolerance of 0.001.
+- Josh verified both result files against their ledger events; chain clean.
+- I have not seen the per-gate numbers, only the restart margin. Recorded here
+  as reported, pending the results file.
+
+**Found — stated no larger than the check**
+- What this supports, and only this: **a live internal state can be saved,
+  survive process death, and causally affect later computation without replay,
+  for this model, this probe set, and this runtime.** That is the sentence the
+  apparatus test was built to earn, and it is earned.
+- The exact-zero delta is coherent rather than suspicious. The state bytes
+  round-trip as a tensor copy, and jitter established the runtime is
+  deterministic at fixed threads, so bit-identical logits are what a correct
+  implementation should produce. Two separate processes computed it.
+- Note on how the restart gate passed: the tolerance came from
+  `max(jitter_range * 10, 1e-3)`. The result is exact, so the tolerance never
+  bore any weight. The gate passed on exactness, not on a tolerance being met.
+
+**Failed / not established**
+- **Nothing about the continuity thesis.** §33 — capability grows where
+  derivation lands on continuity — is untouched. Retention is shown; correction
+  is not. Step 4 (does return correct the continuing state) and step 5 (does
+  continuity beat the same information without it) remain unbuilt.
+- Floor and causality were scored against `required_margin`, and if jitter's
+  range was 0.0 that margin is `min_margin_abs = 0.5` — a constant I picked with
+  no empirical basis. Where that constant was the binding term, the gate rests
+  on it rather than on a measured noise floor. The results file records
+  `margin_binding_term` per gate; that field is what says whether this applies.
+- The specificity confound logged before the declaration (state_A contains the
+  character `3`, unrelated candidates are `' 3'`/`' 8'`) did not bite — the gate
+  passed. That the confound was harmless here is a fact about this run, not a
+  reason to remove the limitation from the record.
+- Probe-memory attribution was never run as a single discriminating pass.
+  Causality passing does much of that work by flipping D's sign with the state,
+  but the three-variation attribution was specified and not performed.
+- One model, one probe set, one runtime, one machine, one run.
+
+**Would kill it**
+- The same battery on a second probe set failing would mean the result is
+  probe-specific rather than a property of the state mechanism.
+- `margin_binding_term` reading `min_margin_abs (ARBITRARY)` on floor or
+  causality would mean those two gates passed against my constant, and a
+  measured noise floor is still owed before they count for much.
+- Checked when the results file is read.
+
+**Carried forward, outside the experiment**
+- The thing Josh asked for at the very start of this session — a model that does
+  not reset between conversations — is now a known-possible engineering task
+  rather than an open question. llama.cpp state save/restore works on this
+  model. That build is separate from the theory and must not be confused with
+  it: it would demonstrate retention, which is the thing already shown, and not
+  correction, which is the thing that matters to the framework.
