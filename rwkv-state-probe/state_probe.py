@@ -664,6 +664,28 @@ def run_restart_load(eng, decl, state_file):
 
 # ---------------------------------------------------------------- cli
 
+def _discard_pending(pending):
+    """
+    Remove a pending file that proves nothing, and report honestly whether the
+    removal actually happened.
+
+    Every caller of this used to swallow the OSError and then assert "no file
+    remains" in the same breath. If cleanup fails the file survives, and a
+    surviving .pending is exactly what a later run reads as a possible
+    commitment. The message must say what is true, not what was intended.
+    """
+    try:
+        os.remove(pending)
+        return ""
+    except FileNotFoundError:
+        return ""
+    except OSError as e:
+        return (f"\n\nWARNING: cleanup also failed ({e!r}). {pending} REMAINS on "
+                f"disk. It is NOT a commitment -- nothing was committed in this "
+                f"run -- but a later declare cannot tell that from the file alone "
+                f"and will refuse with UNKNOWN status. Remove it deliberately.")
+
+
 def persist_declaration(decl, decl_path, led, _link=None):
     """
     Order of operations, and why each part is the way it is.
@@ -748,13 +770,11 @@ def persist_declaration(decl, decl_path, led, _link=None):
         # must not survive: a leftover pre-commit .pending is indistinguishable
         # from a post-commit one, and would be read as evidence of a commitment
         # that does not exist.
-        try:
-            os.remove(pending)
-        except OSError:
-            pass
+        note = _discard_pending(pending)
         raise SystemExit(
             f"REFUSING: could not write the pending declaration ({e!r}). Nothing "
-            f"was committed and no file remains. This is not a probe or gate result."
+            f"was committed." + (note or " No file remains.")
+            + " This is not a probe or gate result."
         )
 
     try:
@@ -772,23 +792,18 @@ def persist_declaration(decl, decl_path, led, _link=None):
             "declaration_json_sha256": blob_sha,
         })
     except Exception as e:
-        try:
-            os.remove(pending)
-        except OSError:
-            pass
+        note = _discard_pending(pending)
         raise SystemExit(
-            f"REFUSING: ledger commit failed ({e!r}). No declaration was written "
-            f"and nothing is in the chain. This is not a probe or gate result."
+            f"REFUSING: ledger commit failed ({e!r}). Nothing is in the chain and "
+            f"no declaration was published." + (note or " No file remains.")
+            + " This is not a probe or gate result."
         )
 
     if ev is None:
-        try:
-            os.remove(pending)
-        except OSError:
-            pass
+        note = _discard_pending(pending)
         raise SystemExit(
-            "REFUSING: ledger commit returned no event id. No declaration was "
-            "written and nothing is in the chain."
+            "REFUSING: ledger commit returned no event id. Nothing is in the "
+            "chain and no declaration was published." + (note or " No file remains.")
         )
 
     try:

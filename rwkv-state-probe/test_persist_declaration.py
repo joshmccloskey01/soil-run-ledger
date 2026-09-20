@@ -118,7 +118,7 @@ m.os.fsync = lambda fd: (_ for _ in ()).throw(OSError("simulated fsync failure")
 try:
     m.persist_declaration(DECL, path, led_unused); raise AssertionError("should have refused")
 except SystemExit as e:
-    assert "Nothing was committed and no file remains" in str(e), str(e)
+    assert "Nothing was committed." in str(e) and "No file remains." in str(e), str(e)
 finally:
     m.os.fsync = real_fsync
 assert not os.path.exists(path + ".pending"), "pre-commit .pending must NOT survive"
@@ -164,6 +164,37 @@ assert "THE DESTINATION ALREADY EXISTS" in msg and "Do NOT move over it" in msg
 assert "ln " not in msg.split("THE DESTINATION")[1], "must not hand out a publish command here"
 assert open(path).read() == "A DIFFERENT COMMITTED DECLARATION", "destination was modified"
 print("--- 14 publish fails, dest exists -> refuses to instruct any overwrite\n")
+
+# 15 -- when cleanup itself fails, say so; never claim "no file remains"
+d = tempfile.mkdtemp(); path = os.path.join(d, "declaration.json")
+real_fsync, real_remove = m.os.fsync, m.os.remove
+m.os.fsync = lambda fd: (_ for _ in ()).throw(OSError("simulated fsync failure"))
+m.os.remove = lambda p_: (_ for _ in ()).throw(OSError("simulated cleanup failure"))
+try:
+    m.persist_declaration(DECL, path, FakeLedger("ok")); raise AssertionError("should have refused")
+except SystemExit as e:
+    msg = str(e)
+finally:
+    m.os.fsync, m.os.remove = real_fsync, real_remove
+assert "no file remains" not in msg.lower(), "must not claim the file is gone when it is not"
+assert "REMAINS on disk" in msg and "cleanup also failed" in msg, msg
+assert "NOT a commitment" in msg
+assert os.path.exists(path + ".pending"), "fixture check: the file really did survive"
+print("--- 15 cleanup fails too          -> reports the file REMAINS, not 'no file remains'")
+os.remove(path + ".pending")
+
+# 15b -- when cleanup succeeds, the honest claim is still made
+d = tempfile.mkdtemp(); path = os.path.join(d, "declaration.json")
+m.os.fsync = lambda fd: (_ for _ in ()).throw(OSError("simulated fsync failure"))
+try:
+    m.persist_declaration(DECL, path, FakeLedger("ok")); raise AssertionError("should have refused")
+except SystemExit as e:
+    msg = str(e)
+finally:
+    m.os.fsync = real_fsync
+assert "No file remains." in msg and "REMAINS on disk" not in msg
+assert not os.path.exists(path + ".pending")
+print("--- 15b cleanup succeeds          -> 'No file remains.' and it genuinely does not\n")
 
 print("=== cmd_declare refusal paths (no model loaded) ===\n")
 def cd(ledger):

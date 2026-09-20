@@ -803,3 +803,44 @@ not edits to it.
   match on `declaration_json_sha256`. If that proves impractical in use, a
   verify-pending command is the next thing to build, and it would need testing
   against the real ledger rather than a fake.
+
+## 2026-09-20 (fourth entry) — cleanup failures now reported honestly
+
+**Checked**
+- Josh's real-ledger run of `5a99ec6`: both recovery fixes pass. He executed the
+  printed recovery commands and confirmed committed bytes and hash preserved, a
+  destination appearing afterward not overwritten with both files surviving,
+  pre-commit fsync failure adding no event, unverified `.pending` reported
+  UNKNOWN, and the resulting chain verifying.
+- My three `except OSError: pass` cleanup sites.
+- Sixteen failure paths executed, no model, faked ledger.
+
+**Found**
+- Confirmed and fixed, nonblocking as Josh classified it. All three sites
+  swallowed a cleanup failure and then asserted "no file remains" in the same
+  message. Cleanup now returns a note, and the message says which actually
+  happened: "No file remains." only when the removal succeeded, otherwise an
+  explicit warning that the file REMAINS, is NOT a commitment, and that a later
+  declare cannot tell that from the file alone.
+- Tested both branches: cleanup failing (message reports survival, and the file
+  genuinely survives) and cleanup succeeding (message claims removal, and the
+  file genuinely is gone).
+
+**Failed**
+- This is the third defect of identical shape in three consecutive revisions: a
+  message asserting a state the code had not checked. First `.pending` implies
+  committed, then `mv` instructed over a destination the code had just refused
+  to overwrite, now "no file remains" after a swallowed exception. The
+  underlying habit is writing the message for the path I had in mind rather
+  than for the path the code can actually take.
+- Josh found all three by executing the instructions rather than reading them.
+  My tests still largely assert that a message is produced; only since the last
+  revision do any assert that the message is true.
+- Sixteen tests, all against a faked ledger. Every defect found against the real
+  ledger remains one my fakes could not reach.
+- No declaration. No gate has run. Nothing established about state retention.
+
+**Would kill it**
+- Another message asserting an unchecked state would mean this class is not
+  fixed by patching instances, and every operator-facing message needs auditing
+  against what the code verifies rather than what it attempts.
