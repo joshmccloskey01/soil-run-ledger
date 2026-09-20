@@ -1198,3 +1198,46 @@ before committing this time.
 - Saved state survived a process restart sufficiently to reproduce the measured
   D exactly, for this model, this probe set and this runtime. All four declared
   gates passed. Correction untested. §33 untouched.
+
+## 2026-09-20 (twelfth entry) — fourth narrowing; the word "isolates" retired
+
+**Checked**
+- Josh's review of the counterbalanced design in the eleventh entry.
+
+**Found — correction, mine, superseding the eleventh entry**
+- Holding the candidates fixed does remove the earlier confound. But "because
+  nothing else moved" was still false. Changing the state changes its value and
+  its token sequence, so with **one state per condition** the overlap is
+  confounded with the identity of that particular state.
+- What the three-state contrast can actually support: *these state
+  substitutions changed the fixed measurement by this amount*. It cannot
+  distinguish an overlap effect from other effects of those particular
+  substitutions.
+- Josh's framing, recorded as his and not upgraded: a stronger design would use
+  **multiple matched state families**, counterbalance digit positions and
+  candidate identities across families, check tokenization, and predeclare the
+  aggregate comparison. That would **estimate an overlap effect under specified
+  controls** — not isolate it from one contrast.
+
+**Failed — the class, not the instance**
+- Fourth narrowing in a row, and the instance-level description has stopped
+  being useful. The recurring error is not any particular design flaw. It is
+  that I reach for the word **isolates** before a design has earned it: I
+  propose the cheapest contrast that would produce a number, describe it as
+  isolating a variable, and only discover on review that a second explanation
+  was available the whole time. Twice now the proposed test would have returned
+  a number that looked like an answer.
+- Retiring the word for this work. A design gets called isolating when
+  something other than me has checked that no competing explanation survives it.
+  Until then: "would estimate X under specified controls", or nothing.
+- The confound's contribution remains unmeasured. The pre-declaration
+  limitation stands undischarged. Three entries of design discussion have
+  produced no measurement and no discharge.
+- I am recording Josh's design and not extending it. Two of my extensions were
+  wrong; a third would be me continuing to do the thing this entry is about.
+
+**Unchanged**
+- The completed result stands. Saved state survived a process restart
+  sufficiently to reproduce the measured D exactly, for this model, this probe
+  set and this runtime. All four declared gates passed. Correction untested.
+  §33 untouched.
