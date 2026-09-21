@@ -1241,3 +1241,80 @@ before committing this time.
   sufficiently to reproduce the measured D exactly, for this model, this probe
   set and this runtime. All four declared gates passed. Correction untested.
   §33 untouched.
+
+---
+
+## 2026-09-21 — the April–May archive is not a training record
+
+**Checked**
+- `April-May10.zip`: 40 Stryd per-second CSVs, 10 April – 9 May 2026, 65,578
+  samples. Distance, speed, cadence, ground time, stiffness.
+- `Results.zip`: 7 screenshots. Opened 2 of them, and only after three
+  exchanges.
+- Bout counts under 32 definitions (threshold 1.5–3.5 m/s × gap-bridge 0–3 s ×
+  minimum length 1 or 3 s).
+- Flight time, contact time, duty cycle and stiffness-zero rate by speed band.
+
+**Found**
+- The archive is a **sprint-drill log, not a mileage log**. 18.2 h recorded,
+  **51.5% of samples at exactly 0 m/s**, 13.6% at or above 3 m/s — 149 minutes
+  of running inside 18 hours of recording. Mean session peak 5.16 m/s, max
+  7.34 m/s. Sessions of 4.75 h containing 2.46 km are not runs.
+- **Flight time saturates at 145–155 ms above 5 m/s**, on 640 valid samples
+  across the 5.0–6.5 bands: 149, 154, 145 ms. This is the standing instrument
+  rule checked against this block and holding. Above 6.5 m/s it reads 139 ms,
+  but that is 32 samples and too thin to call a departure.
+- Contact time falls monotonically 483 → 141 ms from 0.5 to 8 m/s.
+- **Below 1.5 m/s the pod fabricates rather than degrades.** It reports 35 ms
+  of flight time at walking speed. Walking has no flight phase by definition.
+  37.7% of samples in that band have stiffness zeroed; 3.8% at 1.5–2.0 m/s,
+  under 1% from 2.0 to 5.0, then back up to 5.2% above 6 m/s. The standing rule
+  says "unreliable below about 3 m/s"; below 2 m/s that is understated and is
+  superseded here for that band only.
+- Cadence varies independently of speed inside every band (sd 5–14 spm,
+  p5–p95 spans to 44 spm), so a transfer function over (speed, cadence) is
+  identifiable from data of this kind.
+- 8 of 18,040 samples dropped as contact > 60000/cadence. Same filter as the
+  April 2026 block, very different rate there (305 of 17,823).
+
+**Failed**
+- I read the archive as a record of training volume, computed 74.5 km over 18
+  days, named twelve dates with "no file," and **asserted it against Josh three
+  times.** The pod had died mid-block and only part of the data was exported;
+  the device was later stolen. 9 May reads 0.08 km in the CSVs and 17.07 km on
+  Strava with four lifetime PRs. The screenshot that settles it arrived in the
+  same message as the CSVs and I did not open it until after the third
+  exchange.
+- I also manufactured an "internal contradiction" — 400 exposures at 24 s
+  cannot be 40 km/week — which existed only because I was insisting two
+  separate records had to be one record. There was never a conflict.
+- The failure was not being wrong about the archive. It was asserting before
+  checking my own work, twice. Taking the hit has to happen before the third
+  assertion.
+- Josh's 400+ figure is also not supported by the archive: 249–334 across all
+  32 definitions. That is now a fact about a partial export, not about what he
+  did, and the count moves with how an exposure is cut.
+- I described the pod-design decomposition as too smooth to count as evidence.
+  Josh's correction, recorded as his: the method is not a clean chain. It is
+  staying grounded in first principles while being wrong and taking the hit. My
+  objection was fair about the narrative and aimed at the method.
+
+**Would kill it**
+- **Flight saturation:** a session above 5 m/s with mean flight outside
+  140–160 ms on more than 100 valid samples. Checked on the first block the new
+  pod produces.
+- **The below-2 m/s fabrication claim:** a foot-mounted IMU showing genuine
+  flight during walking would mean the 35 ms was real and the pod was right.
+  Checked when the ICM-45686 build produces its first walking data.
+- **The regime structure:** if a deceleration sweep with the new pod shows no
+  boundary in feature space, the multi-regime transfer function is unnecessary
+  and a single model with a saturating flight term wins. No date — the hardware
+  does not exist yet.
+
+**Unchanged, and carried forward**
+- The pod change breaks the series. Stryd's ground contact, stiffness and
+  vertical ratio are inferences through an algorithm nobody outside Stryd has
+  seen. The new pod's versions will be different quantities wearing the same
+  names, so the old numbers become history rather than baseline and the floor
+  is re-established from zero on the new instrument.
+- Nothing in the pod design has been built or returned anything.
