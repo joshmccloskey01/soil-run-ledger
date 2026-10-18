@@ -19,3 +19,18 @@
 
 **Would kill it**
 - Narrow, testable version only (Claude's proposal, not Josh's claim): if the persistence premise maps to "owned progress," then a floor that rises only while effort is being spent to hold it, and falls back within ~3 weeks of ordinary training, refutes "owned" for that block. Check at the next block review against the floor readout; no date set by Josh.
+
+### 2026-10-18, addendum (same session)
+
+**Checked**
+- Josh's clarification: "made of logic because a computer is a logic gate."
+
+**Found**
+- At the hardware level a computer is built from logic gates, so for a computer "made of logic" is literal. The gates are physical: matter arranged so that its state switches according to a rule.
+
+**Failed**
+- Claude was wrong in the entry above to record "made of logic" as a conflict with the corpus. Superseded on 2026-10-18 by this clarification. The original line stays as it was written.
+- Still open: what the tripod, ground wire and adapter boards physically do in the build. The "ground wire" reading in the entry above is unconfirmed.
+
+**Would kill it**
+- No new claim added.
