@@ -34,3 +34,19 @@
 
 **Would kill it**
 - No new claim added.
+
+### 2026-10-18, addendum 2 — Experiment 1
+
+**Checked**
+- Wrote `experiments/exp1/PREREGISTRATION.md` (predictions, frozen items, definitions), committed in 6d15926 before any model was run.
+- Wrote `experiments/exp1/run_exp1.py`. Ran its self-test on a 4-layer randomly initialized GPT-2-shaped model: the rank-one edit, the transposed weight layout, the injection hook and the least-squares fit all reproduce the requested change to within a relative error of about 2e-7.
+
+**Found**
+- The code's arithmetic does what the protocol says. That is a check of the mechanics, not a result about learning. The random model has no knowledge to test.
+
+**Failed**
+- Experiment 1 was not executed. huggingface.co is refused by this environment's network policy, so the GPT-2 weights and the WikiText regression set cannot be downloaded. No GPT-2 numbers exist.
+- The ledger event types the protocol names (edge_candidate, probe_nomination, probe_return, retention_check) do not appear anywhere in this folder's ledger code or documents. The ledger core accepts any event_type string, so the names can be used, but nothing here defines their schema.
+
+**Would kill it**
+- No claim added. The six predictions stand open in the preregistration; they get settled on the first run.

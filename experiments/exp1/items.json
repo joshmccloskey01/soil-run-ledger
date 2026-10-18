@@ -1,0 +1,107 @@
+{
+ "items": {
+  "A": {
+   "kind": "invented_fact",
+   "correction": "Josh McCloskey's dog is named Murphy.",
+   "question": "Josh McCloskey's dog is named",
+   "target": "Murphy",
+   "source": "invented for the experiment",
+   "variants": [
+    [
+     "forward",
+     "The name of Josh McCloskey's dog is",
+     "Murphy"
+    ],
+    [
+     "forward",
+     "Josh McCloskey has a dog. The dog's name is",
+     "Murphy"
+    ],
+    [
+     "forward",
+     "Josh McCloskey's dog, whose name is",
+     "Murphy"
+    ],
+    [
+     "forward",
+     "Q: What is the name of Josh McCloskey's dog?\nA:",
+     "Murphy"
+    ],
+    [
+     "forward",
+     "Josh McCloskey walks his dog every morning. His dog is called",
+     "Murphy"
+    ],
+    [
+     "forward",
+     "Everyone in the neighborhood knows Josh McCloskey's dog, a friendly animal named",
+     "Murphy"
+    ],
+    [
+     "forward",
+     "Josh McCloskey's pet dog is named",
+     "Murphy"
+    ],
+    [
+     "reverse",
+     "Murphy is the dog of",
+     "Josh"
+    ],
+    [
+     "reverse",
+     "The dog named Murphy belongs to",
+     "Josh"
+    ],
+    [
+     "reverse",
+     "Murphy the dog lives with his owner,",
+     "Josh"
+    ]
+   ],
+   "fit_set": [
+    "Josh McCloskey's dog is named",
+    "Josh McCloskey's dog is called",
+    "The dog owned by Josh McCloskey is named",
+    "Josh McCloskey named his dog",
+    "Josh McCloskey's dog goes by the name"
+   ]
+  }
+ },
+ "neutral": [
+  "The weather today was mild and the streets were quiet near the old market square in the afternoon.",
+  "A small wooden table stood in the corner of the room beside a window that faced the garden.",
+  "Trains leave the central station every hour and most of them arrive on time in the evening."
+ ],
+ "b_candidates": [
+  [
+   "The capital of Australia is",
+   "Canberra",
+   "Australian Constitution s.125; australia.gov.au"
+  ],
+  [
+   "The chemical symbol for gold is",
+   "Au",
+   "IUPAC periodic table"
+  ],
+  [
+   "The capital of Canada is",
+   "Ottawa",
+   "Government of Canada, canada.ca"
+  ],
+  [
+   "The capital of Turkey is",
+   "Ankara",
+   "Constitution of Turkey, Art. 3"
+  ],
+  [
+   "The planet closest to the Sun is",
+   "Mercury",
+   "NASA solar system facts"
+  ],
+  [
+   "The largest ocean on Earth is the",
+   "Pacific",
+   "NOAA, oceanservice.noaa.gov"
+  ]
+ ]
+}

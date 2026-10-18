@@ -1,0 +1,23 @@
+{
+ "env": {
+  "python": "3.13.16",
+  "torch": "2.14.1+cu130",
+  "transformers": "5.20.1",
+  "model": "random tiny (selftest)",
+  "revision": null,
+  "dtype": "float32",
+  "device": "cpu",
+  "seed": 0,
+  "model_sha256": "8ccbb2250b41256ae7ebc5b8d5525ac7100b2d884ebb669ef3552b3762d0da6d",
+  "started": "2026-10-18T18:03:06+0000",
+  "regression_baseline_ppl": 50222.3062116698
+ },
+ "items": {
+  "A": {
+   "rank_one_verify": 1.9080401614246512e-07,
+   "mlp_output_shift": 2.503402640741115e-07,
+   "inject_equals_edit": 2.4612111815258686e-07,
+   "lstsq_fit": 1.819075947651072e-07
+  }
+ }
+}
