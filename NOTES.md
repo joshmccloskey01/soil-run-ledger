@@ -50,3 +50,23 @@
 
 **Would kill it**
 - No claim added. The six predictions stand open in the preregistration; they get settled on the first run.
+
+## 2026-10-20
+
+**Checked**
+- Four documents Josh uploaded, read in full: Convergence Map round 1 (21 links, 77 rows), round 2 (74 rows), "Re-Walked" (C loop C1–C10 plus the 21 links), and a ChatGPT rescoring against a 19-link version dated 19 Oct 2026. The 19-link text itself was not among the uploads.
+- None of the cited primary sources were opened by Claude. Every source claim below is the documents' claim, not something Claude checked.
+
+**Found**
+- "Ground wire" is the name of the whole chain, and link 4 of the 21-link version reads "Choosing to persist hooks up the ground wire." So the 18 Oct reading of the phrase matches the documents. The tripod and adapter boards appear in none of the four documents.
+- Where Experiment 1 sits, in the documents' own terms: it tests only the write-back step, C7 (a link moves into the parallel loop) / L11–L13 (weights × state, a confirmed shortfall as the target, a step small enough to undo). The correction is supplied by hand, so C4–C6 (error on the error, finding the link, routing effort) are not tested. "Re-Walked" says Daw, Niv & Dayan 2005 explicitly leave this write-back step unmodelled.
+
+**Failed**
+- The rankings cannot be compared across documents. Friston is 2.5/21 (11.9%) in round 1 and 4.0/19 (21.1%) in the ChatGPT rescore, both called "strict." That is a different chain, a different rubric and a different scorer, so by the instrument rule these are not the same measurement. The ChatGPT document calls its result "materially stronger" by comparing across them.
+- All scoring was done by one model per document, and the target chain was scored by Josh himself (21/21). No inter-rater agreement exists. The ChatGPT document says so in its last section and proposes blind coders; no blind coding has been done.
+- The ChatGPT document contains 32 unresolved citation markers ("citeturn22view…"). Its sources cannot be traced from the file.
+- The originality argument ("the best single predecessor covers 23.7%, the union covers 55.3%, and the gap is where the synthesis lives") has no control. Any long chain of clauses drawn from many fields, written by one person and scored against specialists, would likely show the same gap. As it stands, the metric cannot tell an original synthesis from an arbitrary concatenation.
+- The packaging in the ChatGPT document ("unusually clear," "warrant taking the work seriously") runs hotter than its checks, which by its own account were a screening rescore for most rows.
+
+**Would kill it** (Claude's proposal, not Josh's claim)
+- Claim under test: the union-vs-best-single gap measures originality. Refutation: write a control chain of comparable length (for example Beer's Viable System Model, or a deliberately arbitrary 19-clause mix across fields), score it with the same rubric and a different scorer, and find that its best predecessor also covers under about 25%. Check date: not set. Josh decides whether to run it.
