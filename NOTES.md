@@ -70,3 +70,21 @@
 
 **Would kill it** (Claude's proposal, not Josh's claim)
 - Claim under test: the union-vs-best-single gap measures originality. Refutation: write a control chain of comparable length (for example Beer's Viable System Model, or a deliberately arbitrary 19-clause mix across fields), score it with the same rubric and a different scorer, and find that its best predecessor also covers under about 25%. Check date: not set. Josh decides whether to run it.
+
+## 2026-10-28
+
+**Checked**
+- Josh's three physics problems, saved verbatim to `problems/quantum_three.md`. Checked against Claude's background knowledge only. No papers were fetched or opened this session.
+
+**Found**
+- All three are recognised open problems, stated accurately: (1) the measurement problem, (2) the probability problem in Many Worlds, (3) Penrose's gravity-and-superposition problem.
+- (2) bundles two problems: what probability means when everything happens (the "incoherence" problem) and why the odds follow the Born rule. Attempted derivations exist (Deutsch–Wallace decision theory, Zurek's envariance, Sebens–Carroll self-locating uncertainty). They remain disputed.
+- (3) Penrose (1996) proposed that a mass in two places collapses on its own, after a time set by the gravitational self-energy of the difference between the two positions (the Diósi–Penrose model).
+
+**Failed**
+- Wall on (3), from memory and not re-checked this session: an underground experiment at Gran Sasso (Donadi et al., *Nature Physics* 2021) looked for the faint radiation that the simplest, parameter-free Diósi–Penrose model predicts and ruled that version out. Versions with an added free parameter survive. Verify before citing.
+- Wall on (1): decoherence explains why interference disappears for large objects. It does not pick out which single outcome occurs, so it does not close (1) on its own. Recorded so it doesn't get offered as a solution later.
+- Conflict with the 18 Oct image ("massive things are the gates"): that picture takes a side on (1) and (3), namely that mass is where the record gets made. That is Penrose's side, and its simplest testable form is the one the Gran Sasso result constrains.
+
+**Would kill it**
+- No claim added by Josh. If the "mass is the gate" position gets written up as a claim, then a confirmed observation of a mass large enough to matter gravitationally held in superposition past the Diósi–Penrose time would refute it. Proposed tests of gravity-mediated entanglement (Bose et al. 2017; Marletto & Vedral 2017) are aimed at that regime. No date: those experiments have not been done.
